@@ -1,10 +1,14 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import https from "https";
 import dotenv from "dotenv";
 
 // Load environment variables strictly on server side from .env file
 dotenv.config();
+
+// Ignore SSL certificate verification issues for custom S3/MinIO endpoints
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 import { createServer as createViteServer } from "vite";
 import { 
@@ -12,8 +16,10 @@ import {
   PutObjectCommand, 
   GetObjectCommand, 
   HeadBucketCommand,
-  ListObjectsV2Command
+  ListObjectsV2Command,
+  CreateBucketCommand
 } from "@aws-sdk/client-s3";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 
 const app = express();
 const PORT = 3000;
@@ -47,6 +53,11 @@ function getS3Client() {
   const secretAccessKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
   const region = (process.env.MINIO_REGION || "us-east-1").trim();
 
+  const httpsAgent = new https.Agent({
+    rejectUnauthorized: false,
+    keepAlive: true,
+  });
+
   return new S3Client({
     endpoint,
     region,
@@ -55,6 +66,11 @@ function getS3Client() {
       secretAccessKey,
     },
     forcePathStyle: true,
+    requestHandler: new NodeHttpHandler({
+      httpsAgent,
+      connectionTimeout: 10000,
+      requestTimeout: 15000,
+    }),
   });
 }
 
@@ -88,9 +104,11 @@ app.get("/api/sync/status", async (req, res) => {
     const isMinioConfigured = Boolean(accessKey && secretKey);
 
     if (isMinioConfigured) {
+      const s3 = getS3Client();
+
+      // Test 1: ListObjectsV2
       try {
-        const s3 = getS3Client();
-        await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+        await s3.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));
         return res.json({
           configured: true,
           connected: true,
@@ -100,18 +118,49 @@ app.get("/api/sync/status", async (req, res) => {
           bucket,
           prefix
         });
-      } catch (headErr: any) {
-        console.error("HeadBucket MinIO error:", headErr.message || headErr);
-        return res.json({
-          configured: true,
-          connected: false,
-          storageType: "local",
-          message: `کلیدهای MinIO تنظیم شده اما اتصال برقرار نشد: ${headErr.message || "HeadBucket failed"}. (ذخیره‌سازی به حالت محلی منتقل شد)`,
-          endpoint,
-          bucket,
-          prefix,
-          error: headErr.message || String(headErr)
-        });
+      } catch (listErr: any) {
+        console.warn("MinIO ListObjectsV2 check failed, trying HeadBucket/CreateBucket:", listErr.message || listErr);
+
+        // Test 2: HeadBucket
+        try {
+          await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+          return res.json({
+            configured: true,
+            connected: true,
+            storageType: "minio",
+            message: `اتصال به سرور مینیو (MinIO) و باکت "${bucket}" برقرار است.`,
+            endpoint,
+            bucket,
+            prefix
+          });
+        } catch (headErr: any) {
+          // Test 3: Try creating bucket if it doesn't exist
+          try {
+            await s3.send(new CreateBucketCommand({ Bucket: bucket }));
+            return res.json({
+              configured: true,
+              connected: true,
+              storageType: "minio",
+              message: `باکت "${bucket}" بر روی سرور MinIO ایجاد شد و اتصال برقرار گردید.`,
+              endpoint,
+              bucket,
+              prefix
+            });
+          } catch (createErr: any) {
+            const errDetail = listErr.name || listErr.message || headErr.message || createErr.message || String(listErr);
+            console.error("MinIO connection failed completely:", errDetail);
+            return res.json({
+              configured: true,
+              connected: false,
+              storageType: "local",
+              message: `کلیدهای MinIO تنظیم شده اما اتصال به باکت "${bucket}" در سرور ${endpoint} برقرار نشد (${errDetail}). لطفاً صحت کلیدها و نام باکت را در فایل .env بررسی نمایید.`,
+              endpoint,
+              bucket,
+              prefix,
+              error: errDetail
+            });
+          }
+        }
       }
     }
 
