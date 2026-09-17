@@ -13,7 +13,7 @@ services:
       - "3000:3000"
     volumes:
       # Persistent local storage mapping on Linux server
-      - /home/mfih/tahzib-app/storage:/app/storage
+      - /home/mfih/tahzib_storage:/app/storage
     env_file:
       - .env
     environment:
