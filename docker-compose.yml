@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  tahzib-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    container_name: tahzib-app-container
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent local storage mapping on Linux server
+      - /home/mfih/tahzib-app/storage:/app/storage
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - STORAGE_PATH=/app/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

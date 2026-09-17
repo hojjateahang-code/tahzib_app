@@ -1,0 +1,6 @@
+{
+  "name": "سامانه جامع مدیریت تهذیب",
+  "description": "سیستم یکپارچه مدیریت تربیتی مدارس علمیه (Offline-First)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
