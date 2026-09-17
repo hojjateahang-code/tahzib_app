@@ -24,7 +24,7 @@ export function StudentMonitoringList() {
 
   const students = useLiveQuery(async () => {
     const users = await db.users.where('role').equals('STUDENT').toArray();
-    return users.filter(u => u.isApproved);
+    return users.filter(u => u.isApproved && !u.isDeleted);
   });
   const reports = useLiveQuery(
     () => selectedStudentId ? db.reports.where({ studentId: selectedStudentId }).reverse().sortBy('date') : [],
@@ -32,7 +32,8 @@ export function StudentMonitoringList() {
   );
   
   // Also get the authors for reports
-  const allUsers = useLiveQuery(() => db.users.toArray());
+  const rawUsers = useLiveQuery(() => db.users.toArray());
+  const allUsers = rawUsers?.filter(u => !u.isDeleted);
 
   const selectedStudent = students?.find(s => s.id === selectedStudentId);
 

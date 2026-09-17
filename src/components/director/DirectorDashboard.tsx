@@ -19,9 +19,10 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
   const [selectedBaseForModal, setSelectedBaseForModal] = useState<number | null>(null);
 
   // Live DB Queries
-  const allUsers = useLiveQuery(() => db.users.toArray());
-  const students = useLiveQuery(() => db.users.where('role').equals('STUDENT').toArray());
-  const mentors = useLiveQuery(() => db.users.where('role').equals('MENTOR').toArray());
+  const rawAllUsers = useLiveQuery(() => db.users.toArray());
+  const allUsers = useMemo(() => rawAllUsers?.filter(u => !u.isDeleted), [rawAllUsers]);
+  const students = useMemo(() => allUsers?.filter(u => u.role === 'STUDENT'), [allUsers]);
+  const mentors = useMemo(() => allUsers?.filter(u => u.role === 'MENTOR'), [allUsers]);
   const assessments = useLiveQuery(() => db.assessments.toArray());
   const reports = useLiveQuery(() => db.reports.toArray());
   const messages = useLiveQuery(() => db.messages.toArray());

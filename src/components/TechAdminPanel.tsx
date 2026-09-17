@@ -22,7 +22,8 @@ import {
   Lock,
   Radio,
   Sparkles,
-  Menu
+  Menu,
+  Terminal
 } from 'lucide-react';
 import { StudentPanel } from './StudentPanel';
 import { MentorPanel } from './MentorPanel';
@@ -33,9 +34,10 @@ import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
 import { checkMinIOStatus, syncMinIOData, getDeviceId, getSynchronizedTime, triggerSync, type MinioStatus } from '../sync';
 import { MinioConnectionDebugWidget } from './MinioConnectionDebugWidget';
 import { TechAdminLiveUpdateManager } from './tech-admin/TechAdminLiveUpdateManager';
+import { TechAdminEventLogs } from './TechAdminEventLogs';
 
 export function TechAdminPanel() {
-  const [activeTab, setActiveTab] = useState<'PANELS_MONITOR' | 'SYSTEM_DB' | 'SYNC_MINIO' | 'USER_MANAGEMENT' | 'LIVE_UPDATES'>('PANELS_MONITOR');
+  const [activeTab, setActiveTab] = useState<'PANELS_MONITOR' | 'SYSTEM_DB' | 'SYNC_MINIO' | 'USER_MANAGEMENT' | 'LIVE_UPDATES' | 'EVENT_LOGS'>('PANELS_MONITOR');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // State for panel emulation
@@ -182,7 +184,7 @@ export function TechAdminPanel() {
       </div>
 
       {/* تب‌های اصلی پنل مسئول فنی با چینش گرید کاملاً ریسپانسیو و بدون اسکرول - چسبیده به بالا هنگام اسکرول */}
-      <div className="z-40 grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-md transition-all">
+      <div className="z-40 grid grid-cols-3 sm:grid-cols-6 gap-1.5 p-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl border border-slate-200 dark:border-slate-800 shadow-md transition-all">
         <button
           onClick={() => setActiveTab('PANELS_MONITOR')}
           className={`px-3 py-2 rounded-2xl text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
@@ -228,12 +230,24 @@ export function TechAdminPanel() {
           }`}
         >
           <Users className="w-3.5 h-3.5" />
-          <span> کاربران</span>
+          <span>کاربران</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('EVENT_LOGS')}
+          className={`px-3 py-2 rounded-2xl text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            activeTab === 'EVENT_LOGS'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+          <span>لاگ‌های سیستم</span>
         </button>
 
         <button
           onClick={() => setActiveTab('LIVE_UPDATES')}
-          className={`col-span-2 sm:col-span-1 px-3 py-2 rounded-2xl text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`px-3 py-2 rounded-2xl text-[10px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
             activeTab === 'LIVE_UPDATES'
               ? 'bg-indigo-600 text-white shadow-md'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -519,6 +533,13 @@ export function TechAdminPanel() {
       {activeTab === 'LIVE_UPDATES' && (
         <div className="bg-slate-100/50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-200 dark:border-slate-800">
           <TechAdminLiveUpdateManager />
+        </div>
+      )}
+
+      {/* ۶. تب سامانه لاگ‌های سیستم */}
+      {activeTab === 'EVENT_LOGS' && (
+        <div>
+          <TechAdminEventLogs />
         </div>
       )}
 

@@ -16,14 +16,16 @@ import {
   Phone,
   Eye
 } from 'lucide-react';
-import { triggerSync } from '../../sync';
+import { triggerSync, getSynchronizedTime } from '../../sync';
 import type { User, Role } from '../../types';
 import { UserImportExportModal } from '../common/UserImportExportModal';
 import { ROLE_PERSIAN_TITLES } from '../../utils/excelUtils';
 import { StudentDetailModal } from '../common/StudentDetailModal';
+import { logger } from '../../lib/logger';
 
 export function VicePrincipalUsers() {
-  const allUsers = useLiveQuery(() => db.users.toArray()) || [];
+  const rawUsers = useLiveQuery(() => db.users.toArray()) || [];
+  const allUsers = rawUsers.filter(u => !u.isDeleted);
   
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | Role>('ALL');
@@ -115,6 +117,7 @@ export function VicePrincipalUsers() {
     const fName = editForm.firstName || '';
     const lName = editForm.lastName || '';
     const fullName = `${fName} ${lName}`.trim() || editForm.name || 'کاربر';
+    const now = getSynchronizedTime();
 
     await db.users.update(editingUserId, {
       firstName: fName,
@@ -126,16 +129,33 @@ export function VicePrincipalUsers() {
       phone: editForm.phone,
       eitaaId: editForm.eitaaId,
       role: editForm.role,
-      base: (editForm.role === 'STUDENT' || editForm.role === 'MENTOR') ? editForm.base : undefined
+      base: (editForm.role === 'STUDENT' || editForm.role === 'MENTOR') ? editForm.base : undefined,
+      updatedAt: now
     });
 
+    logger.info('USER_MGMT', `اطلاعات کاربر ${fullName} (${editForm.username}) ویرایش شد.`, { userId: editingUserId, name: fullName, role: editForm.role });
     setEditingUserId(null);
     triggerSync();
   };
 
   const deleteUser = async (id: string) => {
     if (confirm('آیا از حذف این کاربر اطمینان دارید؟ تمام داده‌های مرتبط با او حذف خواهد شد.')) {
-      await db.users.delete(id);
+      const user = await db.users.get(id);
+      const now = getSynchronizedTime();
+
+      // Soft delete tombstone: mark as deleted with updated timestamp so merge keeps it deleted
+      await db.users.update(id, {
+        isDeleted: true,
+        updatedAt: now
+      });
+
+      logger.warn('USER_MGMT', `کاربر ${user?.name || id} (${user?.username || ''}) حذف شد و برچسب ابطال ثبت گردید.`, {
+        userId: id,
+        name: user?.name,
+        role: user?.role,
+        tombstoneTimestamp: now
+      });
+
       triggerSync();
     }
   };

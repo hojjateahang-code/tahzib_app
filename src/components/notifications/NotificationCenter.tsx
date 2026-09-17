@@ -54,14 +54,15 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   );
 
   // Fetch all users for name lookups
-  const allUsers = useLiveQuery(() => db.users.toArray());
+  const rawAllUsers = useLiveQuery(() => db.users.toArray());
+  const allUsers = rawAllUsers?.filter(u => !u.isDeleted);
 
   // Pending approvals ONLY for VICE_PRINCIPAL & DIRECTOR
   const pendingUsers = useLiveQuery(
     async () => {
       if (currentUser.role !== 'VICE_PRINCIPAL' && currentUser.role !== 'DIRECTOR') return [];
       const users = await db.users.toArray();
-      return users.filter(u => !u.isApproved);
+      return users.filter(u => !u.isApproved && !u.isDeleted);
     },
     [currentUser.role]
   );

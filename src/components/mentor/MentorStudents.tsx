@@ -28,11 +28,14 @@ export function MentorStudents() {
   const detailsRef = useRef<HTMLDivElement>(null);
 
   const students = useLiveQuery(
-    () => {
+    async () => {
+      let list;
       if (currentUser?.base) {
-        return db.users.where('role').equals('STUDENT').filter(u => u.base === currentUser.base).toArray();
+        list = await db.users.where('role').equals('STUDENT').filter(u => u.base === currentUser.base).toArray();
+      } else {
+        list = await db.users.where('role').equals('STUDENT').toArray();
       }
-      return db.users.where('role').equals('STUDENT').toArray();
+      return list.filter(u => !u.isDeleted);
     },
     [currentUser]
   );

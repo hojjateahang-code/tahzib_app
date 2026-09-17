@@ -64,7 +64,7 @@ export function MessagingCenter() {
   // Fetch all users
   const allUsers = useLiveQuery(async () => {
     const users = await db.users.toArray();
-    return users.filter(u => u.isApproved);
+    return users.filter(u => u.isApproved && !u.isDeleted);
   });
 
   // Fetch custom groups owned by current user or available

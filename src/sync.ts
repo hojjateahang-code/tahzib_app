@@ -1,6 +1,7 @@
 import { safeUUID } from './lib/crypto';
 import { db } from './db';
 import type { BaseEntity } from './types';
+import { logger } from './lib/logger';
 
 let syncTimeout: any = null;
 
@@ -156,10 +157,12 @@ export async function checkMinIOStatus(): Promise<MinioStatus> {
  */
 export async function syncMinIOData(): Promise<{ success: boolean; message: string; timestamp?: string }> {
   try {
+    logger.info('SYNC', 'شروع چرخه همگام‌سازی سرور اصلی (Fetch-Merge-Push)...');
+
     // 1. Clock Sync
     await syncServerTimeOffset();
 
-    // 2. FETCH: List all backup files in MinIO
+    // 2. FETCH: List all backup files in Storage
     const listRes = await fetch('/api/sync/list').catch(() => null);
     const backupFiles: { key: string }[] = [];
 
@@ -169,6 +172,8 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
         backupFiles.push(...listData.files);
       }
     }
+
+    logger.info('SYNC', `تعداد ${backupFiles.length} فایل بک‌آپ و دستگاه از سرور شناسایی شد.`);
 
     // 3. Download and aggregate all remote backup states
     const remoteDatasets: any[] = [];
@@ -250,7 +255,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     if (localCustomGroups.length > 0) await db.customGroups.bulkPut(localCustomGroups);
     if (localPrivateNotes.length > 0) await db.privateNotes.bulkPut(localPrivateNotes);
 
-    // 5. PUSH: Upload updated consensus dataset to MinIO under client device key + latest.json
+    // 5. PUSH: Upload updated consensus dataset to Storage under client device key + latest.json
     const deviceId = getDeviceId();
     const currentUserId = localStorage.getItem('current_user_id') || 'anon';
     const deviceKey = `backups/device_${currentUserId}_${deviceId}.json`;
@@ -283,12 +288,22 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     });
 
     const pushResult = await pushRes.json();
+    const activeUsersCount = localUsers.filter(u => !u.isDeleted).length;
+    const tombstoneUsersCount = localUsers.filter(u => u.isDeleted).length;
+
+    logger.success('SYNC', `همگام‌سازی کامل انجام شد. (${activeUsersCount} کاربر فعال، ${tombstoneUsersCount} کاربر حذف‌شده با برچسب ابطال)`, {
+      activeUsers: activeUsersCount,
+      tombstones: tombstoneUsersCount,
+      tasks: localTasks.filter(t => !t.isDeleted).length
+    });
+
     return {
       success: pushResult.success,
       message: pushResult.message || 'همگام‌سازی کامل با موفقیت انجام گردید.',
       timestamp: new Date(getSynchronizedTime()).toISOString()
     };
   } catch (error: any) {
+    logger.error('SYNC', `خطا در همگام‌سازی: ${error.message || 'خطای غیرمنتظره'}`, { error: error.stack });
     console.error('Fetch-Merge-Push sync error:', error);
     return { success: false, message: `خطا در همگام‌سازی: ${error.message || 'خطای ناشناخته'}` };
   }

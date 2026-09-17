@@ -32,7 +32,8 @@ export function CounselorStudents() {
   const [missedReasonInput, setMissedReasonInput] = useState<string>('');
   const [presetReason, setPresetReason] = useState<string>('عدم حضور طلبه');
   
-  const students = useLiveQuery(() => db.users.where('role').equals('STUDENT').toArray());
+  const rawStudents = useLiveQuery(() => db.users.where('role').equals('STUDENT').toArray());
+  const students = React.useMemo(() => rawStudents?.filter(u => !u.isDeleted), [rawStudents]);
   const appointments = useLiveQuery(() => db.appointments.toArray());
 
   const filteredStudents = React.useMemo(() => {

@@ -3,9 +3,10 @@ import { db } from '../../db';
 import { useAuth } from '../../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { PlusCircle, Calendar as CalendarIcon, CheckSquare, ListTodo, Trash2, Edit } from 'lucide-react';
-import { triggerSync } from '../../sync';
+import { triggerSync, getSynchronizedTime } from '../../sync';
 import { getTaskPeriodKey } from '../../utils/taskUtils';
 import type { Role } from '../../types';
+import { logger } from '../../lib/logger';
 
 export function VicePrincipalTasks() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -15,8 +16,10 @@ export function VicePrincipalTasks() {
   const [newChecklist, setNewChecklist] = useState<{ id: string, title: string, isCompleted: boolean }[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState('');
 
-  const allTasks = useLiveQuery(() => db.tasks.toArray());
-  const allUsers = useLiveQuery(() => db.users.where('role').notEqual('STUDENT').toArray());
+  const rawTasks = useLiveQuery(() => db.tasks.toArray());
+  const allTasks = rawTasks?.filter(t => !t.isDeleted);
+  const rawUsers = useLiveQuery(() => db.users.where('role').notEqual('STUDENT').toArray());
+  const allUsers = rawUsers?.filter(u => !u.isDeleted);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,7 +110,13 @@ export function VicePrincipalTasks() {
 
   const deleteTask = async (taskId: string) => {
     if (confirm('آیا از حذف این وظیفه اطمینان دارید؟')) {
-      await db.tasks.delete(taskId);
+      const task = await db.tasks.get(taskId);
+      const now = getSynchronizedTime();
+      await db.tasks.update(taskId, {
+        isDeleted: true,
+        updatedAt: now
+      });
+      logger.warn('DATABASE', `برنامه/برنامه تعاملی "${task?.title || taskId}" حذف شد و برچسب ابطال همگام‌سازی گرفت.`, { taskId });
       triggerSync();
     }
   };
