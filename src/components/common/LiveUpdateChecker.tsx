@@ -122,7 +122,7 @@ export function LiveUpdateChecker() {
                 </span>
               </div>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                نسخه جدید در مخزن ابری مینیو (MinIO) آماده دریافت است.
+                نسخه جدید در سرور اصلی سامانه آماده دریافت است.
               </p>
             </div>
           </div>

@@ -46,22 +46,20 @@ export function MinioSyncModal() {
   const deviceId = getDeviceId();
   const syncTimeStr = new Date(getSynchronizedTime()).toLocaleTimeString('fa-IR');
 
-  const isMinioConnected = status?.storageType === 'minio' && status?.connected;
+  const isServerConnected = status?.connected;
 
   // Non-Tech Admin (regular users): Passive visual status indicator only!
   if (!isTechAdmin) {
     return (
       <div
         className={`px-2.5 py-1.5 flex items-center gap-1.5 rounded-xl text-xs font-bold border transition-colors select-none ${
-          isMinioConnected
+          isServerConnected
             ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-            : status?.configured
-            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+            : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
         }`}
-        title={isMinioConnected ? 'ارتباط با سرور ابری همگام‌سازی برقرار است' : 'ارتباط ابری قطع می‌باشد'}
+        title={isServerConnected ? 'ارتباط با سرور اصلی سامانه برقرار است' : 'ارتباط با سرور قطع می‌باشد'}
       >
-        {isMinioConnected ? (
+        {isServerConnected ? (
           <>
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -73,7 +71,7 @@ export function MinioSyncModal() {
           <CloudOff className="w-4 h-4 text-amber-500 shrink-0" />
         )}
         <span className="hidden md:inline">
-          {isMinioConnected ? 'همگام ابری' : 'ذخیره‌ساز محلی'}
+          {isServerConnected ? 'همگام با سرور' : 'عدم اتصال سرور'}
         </span>
       </div>
     );
@@ -85,21 +83,19 @@ export function MinioSyncModal() {
       <button
         onClick={() => { setIsOpen(true); fetchStatus(); }}
         className={`px-2.5 py-1.5 flex items-center gap-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-          isMinioConnected
+          isServerConnected
             ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
-            : status?.configured
-            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100'
-            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+            : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100'
         }`}
-        title="مدیریت و کنترل همگام‌سازی ابری مینیو (مخصوص مسئول فنی)"
+        title="مدیریت و کنترل همگام‌سازی سرور اصلی سامانه (مخصوص مسئول فنی)"
       >
-        {isMinioConnected ? (
+        {isServerConnected ? (
           <Cloud className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
         ) : (
           <CloudOff className="w-4 h-4 text-amber-500 shrink-0" />
         )}
         <span className="hidden md:inline">
-          {isMinioConnected ? 'همگام‌سازی ابری (MinIO)' : 'همگام‌سازی محلی'}
+          {isServerConnected ? 'همگام‌سازی سرور اصلی' : 'خطای اتصال سرور'}
         </span>
       </button>
 
@@ -113,8 +109,8 @@ export function MinioSyncModal() {
                   <Server className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">همگام‌سازی پیشرفته (ویژه مسئول فنی)</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">الگوریتم ادغام هوشمند LWW + همگام‌سازی زمان سرور و تفکیک دستگاه‌ها</p>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">همگام‌سازی و ذخیره‌ساز سرور اصلی</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">ذخیره‌سازی مستقیم روی دیسک سرور سامانه با الگوریتم ادغام هوشمند LWW</p>
                 </div>
               </div>
               <button
@@ -127,19 +123,19 @@ export function MinioSyncModal() {
 
             {/* Status Card */}
             <div className={`p-4 rounded-2xl border mb-5 ${
-              isMinioConnected
+              isServerConnected
                 ? 'bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-200'
                 : 'bg-amber-50/60 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200'
             }`}>
               <div className="flex items-start gap-3">
-                {isMinioConnected ? (
+                {isServerConnected ? (
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 ) : (
                   <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 )}
                 <div className="space-y-1 text-xs leading-relaxed w-full">
                   <p className="font-bold text-sm">
-                    {isMinioConnected ? 'ارتباط با سرور مینیو و موتور ادغام ابری برقرار است' : 'حالت ذخیره‌سازی محلی (عدم اتصال MinIO)'}
+                    {isServerConnected ? 'اتصال به سرور اصلی سامانه و ذخیره‌ساز ابری برقرار است' : 'عدم اتصال به سرور اصلی سامانه'}
                   </p>
                   <p>{status?.message}</p>
                   

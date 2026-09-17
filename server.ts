@@ -164,15 +164,12 @@ app.get("/api/sync/status", async (req, res) => {
       }
     }
 
-    // Default: Local Disk Storage only
+    // Primary Storage: Server Direct Disk Storage
     return res.json({
-      configured: false,
+      configured: true,
       connected: true,
-      storageType: "local",
-      message: "ذخیره‌ساز محلی سرور (Local Disk) فعال است. کلیدهای MinIO در فایل .env تنظیم نشده‌اند.",
-      endpoint,
-      bucket,
-      prefix,
+      storageType: "server",
+      message: "ذخیره‌سازی و همگام‌سازی داده‌ها مستقیماً بر روی دیسک سرور اصلی سامانه با موفقیت برقرار است.",
       storagePath: STORAGE_PATH,
     });
   } catch (error: any) {

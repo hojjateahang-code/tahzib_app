@@ -473,7 +473,7 @@ export function TechAdminPanel() {
               <div>
                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                   <Cloud className="w-5 h-5 text-indigo-600" />
-                  <span>وضعیت لایو موتور همگام‌سازی ابری مینیو (Fetch-Merge-Push)</span>
+                  <span>وضعیت لایو همگام‌سازی و ذخیره‌سازی سرور اصلی (Fetch-Merge-Push)</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   شناسه دستگاه: <strong className="font-mono text-slate-700 dark:text-slate-300">{getDeviceId()}</strong>

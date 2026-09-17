@@ -44,24 +44,24 @@ export function MinioConnectionDebugWidget() {
         className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700/60 rounded-xl text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center justify-center gap-2 mx-auto cursor-pointer shadow-sm"
       >
         <span>🛠️</span>
-        <span>{showPanel ? "پنهان‌سازی پنل دیباگ و تست اتصال" : "نمایش پنل عیب‌یابی و تست اتصال MinIO"}</span>
+        <span>{showPanel ? "پنهان‌سازی پنل دیباگ و تست اتصال" : "نمایش پنل عیب‌یابی و تست اتصال سرور اصلی"}</span>
       </button>
 
       {/* باکس محتوای دیباگ */}
       {showPanel && (
         <div className="mt-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 text-right space-y-4 shadow-xl text-xs text-white animate-in fade-in zoom-in-95 duration-200">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <span className="font-black text-indigo-400 text-xs">وضعیت اتصال به MinIO / سرور ابری</span>
+            <span className="font-black text-indigo-400 text-xs">وضعیت اتصال به سرور اصلی اینترنتی سامانه</span>
             <button
               onClick={handleRunDiagnostics}
               disabled={testing}
               className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-[11px] font-bold cursor-pointer transition-all shadow-sm flex items-center gap-1"
             >
-              {testing ? "در حال تست..." : "تست اتصال زنده"}
+              {testing ? "در حال تست..." : "تست اتصال زنده سرور"}
             </button>
           </div>
 
-          {/* نتیجه تست اتصال MinIO */}
+          {/* نتیجه تست اتصال سرور اصلی */}
           {healthResult && (
             <div
               className={`p-3 rounded-xl border text-xs font-medium flex items-start gap-2 ${
@@ -75,7 +75,7 @@ export function MinioConnectionDebugWidget() {
                 <p className="font-bold">{healthResult.message}</p>
                 {healthResult.details && (
                   <p className="text-[10px] opacity-80 font-mono dir-ltr text-right">
-                    Endpoint: {healthResult.details.endpoint} | Bucket: {healthResult.details.bucket}
+                    نوع ذخیره‌ساز: {healthResult.details.storageType || "دیسک سرور اصلی"} {healthResult.details.storagePath ? `| مسیر: ${healthResult.details.storagePath}` : ""}
                   </p>
                 )}
               </div>
