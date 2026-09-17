@@ -28,7 +28,7 @@ export function VicePrincipalUsers() {
   const allUsers = rawUsers.filter(u => !u.isDeleted);
   
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | Role>('ALL');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | Role | 'MANAGEMENT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewStudentId, setViewStudentId] = useState<string | null>(null);
 
@@ -162,8 +162,14 @@ export function VicePrincipalUsers() {
 
   // Filter logic
   const filteredUsers = allUsers.filter(u => {
-    if (selectedRoleFilter !== 'ALL' && u.role !== selectedRoleFilter) {
-      return false;
+    if (selectedRoleFilter !== 'ALL') {
+      if (selectedRoleFilter === 'MANAGEMENT') {
+        if (u.role !== 'VICE_PRINCIPAL' && u.role !== 'DIRECTOR' && u.role !== 'TECH_ADMIN') {
+          return false;
+        }
+      } else if (u.role !== selectedRoleFilter) {
+        return false;
+      }
     }
 
     if (searchQuery.trim()) {
@@ -270,9 +276,9 @@ export function VicePrincipalUsers() {
 
           <button
             type="button"
-            onClick={() => setSelectedRoleFilter('VICE_PRINCIPAL')}
+            onClick={() => setSelectedRoleFilter('MANAGEMENT')}
             className={`p-3.5 rounded-2xl border text-right transition cursor-pointer col-span-2 sm:col-span-1 ${
-              selectedRoleFilter === 'VICE_PRINCIPAL' || selectedRoleFilter === 'DIRECTOR'
+              selectedRoleFilter === 'MANAGEMENT' || selectedRoleFilter === 'VICE_PRINCIPAL' || selectedRoleFilter === 'DIRECTOR'
                 ? 'bg-amber-600 text-white border-amber-600'
                 : 'bg-amber-50/60 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
             }`}
@@ -439,16 +445,32 @@ export function VicePrincipalUsers() {
               <span className="text-xs text-slate-500 font-normal font-mono">({filteredUsers.length} مورد)</span>
             </h4>
 
-            {/* باکس جستجو */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="جستجوی نام، کد ملی یا ایتا..."
-                className="pr-9 pl-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs w-full sm:w-60 focus:ring-2 focus:ring-emerald-500 outline-none"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-              />
+            {/* فیلتر نقش و باکس جستجو */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <select
+                value={selectedRoleFilter}
+                onChange={e => setSelectedRoleFilter(e.target.value as any)}
+                className="border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+              >
+                <option value="ALL">همه نقش‌ها ({allUsers.length})</option>
+                <option value="STUDENT">طلاب ({studentCount})</option>
+                <option value="MENTOR">اساتید راهنما ({mentorCount})</option>
+                <option value="COUNSELOR">مشاورین ({counselorCount})</option>
+                <option value="MANAGEMENT">مدیریت و معاونین ({staffCount})</option>
+                <option value="DIRECTOR">فقط مدیر مدرسه</option>
+                <option value="VICE_PRINCIPAL">فقط معاون تهذیب</option>
+              </select>
+
+              <div className="relative w-full sm:w-52">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="جستجوی نام، کد ملی..."
+                  className="pr-9 pl-3 py-1.5 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs w-full focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
