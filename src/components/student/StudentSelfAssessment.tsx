@@ -3,8 +3,8 @@ import { useAuth } from '../../store';
 import { db } from '../../db';
 import { triggerSync } from '../../sync';
 import { Assessment, PrayerStatus } from '../../types';
-import { format, subDays, startOfToday, isBefore } from 'date-fns';
-import { CloudOff, Plus, Info, ChevronDown, ChevronUp, MessageSquarePlus, Calendar, AlertCircle, CheckCircle2, XCircle, Send, Star, Clock, X, Smartphone, Edit3, Trash2 } from 'lucide-react';
+import { format, subDays, addDays, startOfToday, isBefore } from 'date-fns';
+import { CloudOff, Plus, Info, ChevronDown, ChevronUp, MessageSquarePlus, Calendar, AlertCircle, CheckCircle2, XCircle, Send, Star, Clock, X, Smartphone, Edit3, Trash2, Save } from 'lucide-react';
 import DatePicker from "react-multi-date-picker";
 import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
@@ -154,26 +154,27 @@ export function StudentSelfAssessment() {
   const [presetMissedReason, setPresetMissedReason] = useState<string>('تداخل با کلاس یا امتحانات');
 
   const updateField = async (field: keyof Assessment, value: any) => {
-    if (isReadOnly) return alert('امکان تغییر اطلاعات روزهای گذشته وجود ندارد. (فقط امروز و دیروز قابل ویرایش هستند)');
+    if (isReadOnly) return alert('امکان تغییر اطلاعات این تاریخ وجود ندارد. (ثبت و ویرایش فقط برای امروز و دیروز فعال است)');
     if (!assessment) return;
-    await db.assessments.update(assessment.id, { [field]: value, synced: false } as any);
+    await db.assessments.update(assessment.id, { [field]: value, synced: false, updatedAt: Date.now() } as any);
     triggerSync();
   };
 
   const updatePrayer = async (prayer: string, status: PrayerStatus) => {
-    if (isReadOnly) return alert('امکان تغییر اطلاعات روزهای گذشته وجود ندارد. (فقط امروز و دیروز قابل ویرایش هستند)');
+    if (isReadOnly) return alert('امکان تغییر اطلاعات این تاریخ وجود ندارد. (ثبت و ویرایش فقط برای امروز و دیروز فعال است)');
     if (!assessment) return;
-    await db.assessments.update(assessment.id, { [prayer]: status, synced: false } as any);
+    await db.assessments.update(assessment.id, { [prayer]: status, synced: false, updatedAt: Date.now() } as any);
     triggerSync();
   };
 
   const updateCustomTask = async (habitId: string, value: boolean | string, habitObj?: any) => {
-    if (isReadOnly) return alert('امکان تغییر اطلاعات روزهای گذشته وجود ندارد.');
+    if (isReadOnly) return alert('امکان تغییر اطلاعات این تاریخ وجود ندارد. (ثبت و ویرایش فقط برای امروز و دیروز فعال است)');
     if (!assessment) return;
     const currentCustom = assessment.customTasks || {};
     await db.assessments.update(assessment.id, {
       customTasks: { ...currentCustom, [habitId]: value },
-      synced: false
+      synced: false,
+      updatedAt: Date.now()
     });
     triggerSync();
 
@@ -184,6 +185,22 @@ export function StudentSelfAssessment() {
         setCourseToReset(targetHabit);
       }
     }
+  };
+
+  const handleSaveEntireAssessment = async () => {
+    if (isReadOnly) return alert('امکان تغییر اطلاعات این تاریخ وجود ندارد. (ثبت و ویرایش فقط برای امروز و دیروز فعال است)');
+    if (!assessment) return;
+
+    await db.assessments.update(assessment.id, {
+      updatedAt: Date.now(),
+      synced: false
+    });
+    triggerSync();
+
+    const faDateStr = new Date(selectedDate).toLocaleDateString('fa-IR');
+    setSuccessMsg(`ارزیابی و تغییرات شما برای تاریخ (${faDateStr}) با موفقیت ثبت و بروزرسانی شد.`);
+    setTimeout(() => setSuccessMsg(null), 5000);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const getHabitRemainingInfo = (habit: any) => {
@@ -481,16 +498,18 @@ export function StudentSelfAssessment() {
           </button>
 
           <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-2xl border border-slate-100 dark:border-slate-700/60">
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex items-center gap-1 ml-1">
               <button 
+                type="button"
                 onClick={() => setSelectedDate(todayDate)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${selectedDate === todayDate ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${selectedDate === todayDate ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
               >
                 امروز
               </button>
               <button 
+                type="button"
                 onClick={() => setSelectedDate(yesterdayDate)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${selectedDate === yesterdayDate ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${selectedDate === yesterdayDate ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
               >
                 دیروز
               </button>
@@ -509,6 +528,27 @@ export function StudentSelfAssessment() {
           </div>
         </div>
       </div>
+
+      {/* Editing Status Banner */}
+      {!isReadOnly ? (
+        <div className="bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs text-emerald-800 dark:text-emerald-200 shadow-xs">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>
+              امکان ثبت، ویرایش و اصلاح اطلاعات برای ارزیابی «امروز» و «دیروز» فعال است. هر زمان متوجه اشتباه شدید می‌توانید موارد را اصلاح کنید.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              ثبت و ویرایش وضعیت ارزیابی مربوط به امروز و دیروز می‌باشد (اطلاعات این تاریخ فقط قابل مشاهده است).
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         
@@ -1189,6 +1229,24 @@ export function StudentSelfAssessment() {
         </div>
 
       </div>
+
+      {/* Explicit Save Assessment Action Bar */}
+      {!isReadOnly && (
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl shadow-lg border border-emerald-200 dark:border-emerald-800/80 flex flex-col sm:flex-row justify-between items-center gap-3 sticky bottom-4 z-10 animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+            <Edit3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>تغییرات شما در تمام گزینه‌ها ذخیره می‌شود و تا پایان مهلت زمانی مجاز قابل ویرایش و اصلاح مجدد است.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveEntireAssessment}
+            className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-2xl text-xs font-black shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>ثبت و ذخیره نهایی ارزیابی</span>
+          </button>
+        </div>
+      )}
 
       {/* Course Reset Confirmation Modal */}
       {courseToReset && (
