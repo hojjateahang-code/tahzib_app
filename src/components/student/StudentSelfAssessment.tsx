@@ -1230,24 +1230,6 @@ export function StudentSelfAssessment() {
 
       </div>
 
-      {/* Explicit Save Assessment Action Bar */}
-      {!isReadOnly && (
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl shadow-lg border border-emerald-200 dark:border-emerald-800/80 flex flex-col sm:flex-row justify-between items-center gap-3 sticky bottom-4 z-10 animate-in fade-in slide-in-from-bottom-2">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
-            <Edit3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>تغییرات شما در تمام گزینه‌ها ذخیره می‌شود و تا پایان مهلت زمانی مجاز قابل ویرایش و اصلاح مجدد است.</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleSaveEntireAssessment}
-            className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-2xl text-xs font-black shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>ثبت و ذخیره نهایی ارزیابی</span>
-          </button>
-        </div>
-      )}
-
       {/* Course Reset Confirmation Modal */}
       {courseToReset && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
