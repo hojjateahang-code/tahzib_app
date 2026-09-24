@@ -192,7 +192,8 @@ export function VicePrincipalUsers() {
   const studentCount = allUsers.filter(u => u.role === 'STUDENT').length;
   const mentorCount = allUsers.filter(u => u.role === 'MENTOR').length;
   const counselorCount = allUsers.filter(u => u.role === 'COUNSELOR').length;
-  const staffCount = allUsers.filter(u => u.role === 'VICE_PRINCIPAL' || u.role === 'DIRECTOR').length;
+  const staffCount = allUsers.filter(u => u.role === 'VICE_PRINCIPAL' || u.role === 'DIRECTOR' || u.role === 'TECH_ADMIN').length;
+  const techAdminCount = allUsers.filter(u => u.role === 'TECH_ADMIN').length;
 
   return (
     <div className="space-y-6">
@@ -340,6 +341,7 @@ export function VicePrincipalUsers() {
                 <option value="COUNSELOR">استاد مشاور</option>
                 <option value="VICE_PRINCIPAL">معاون تهذیب</option>
                 <option value="DIRECTOR">مدیر مدرسه</option>
+                <option value="TECH_ADMIN">مسئول فنی (مدیر سیستم)</option>
               </select>
             </div>
 
@@ -459,6 +461,7 @@ export function VicePrincipalUsers() {
                 <option value="MANAGEMENT">مدیریت و معاونین ({staffCount})</option>
                 <option value="DIRECTOR">فقط مدیر مدرسه</option>
                 <option value="VICE_PRINCIPAL">فقط معاون تهذیب</option>
+                <option value="TECH_ADMIN">مسئول فنی ({techAdminCount})</option>
               </select>
 
               <div className="relative w-full sm:w-52">
@@ -564,6 +567,7 @@ export function VicePrincipalUsers() {
                               <option value="COUNSELOR">مشاور</option>
                               <option value="VICE_PRINCIPAL">معاون تهذیب</option>
                               <option value="DIRECTOR">مدیر مدرسه</option>
+                              <option value="TECH_ADMIN">مسئول فنی</option>
                             </select>
                           </div>
 

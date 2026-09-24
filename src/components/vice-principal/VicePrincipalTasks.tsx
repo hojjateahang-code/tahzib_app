@@ -173,6 +173,7 @@ export function VicePrincipalTasks() {
                 <option value="COUNSELOR">مشاوران</option>
                 <option value="DIRECTOR">مدیر</option>
                 <option value="VICE_PRINCIPAL">معاون تهذیب</option>
+                <option value="TECH_ADMIN">مسئول فنی</option>
               </select>
             </div>
           </div>
