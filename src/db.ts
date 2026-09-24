@@ -125,12 +125,20 @@ export async function seedDatabase() {
       // Ensure admin tech admin user exists and has password admin123
       const adminUser = users.find(u => u.username === 'admin');
       if (adminUser) {
-        if (adminUser.password !== 'admin123' || !adminUser.isApproved) {
-          await db.users.update(adminUser.id, { password: 'admin123', isApproved: true });
+        if (adminUser.password !== 'admin123' || !adminUser.isApproved || adminUser.role !== 'TECH_ADMIN') {
+          await db.users.update(adminUser.id, { password: 'admin123', isApproved: true, role: 'TECH_ADMIN' });
         }
-      } else {
-        // Find if old tech admin exists (e.g. username 'fanni')
-        const techAdminUser = users.find(u => u.role === 'TECH_ADMIN' || u.username === 'fanni');
+      }
+
+      const fanniUser = users.find(u => u.username === 'fanni');
+      if (fanniUser) {
+        if (fanniUser.password !== 'admin123' || !fanniUser.isApproved || fanniUser.role !== 'TECH_ADMIN') {
+          await db.users.update(fanniUser.id, { password: 'admin123', isApproved: true, role: 'TECH_ADMIN' });
+        }
+      }
+
+      if (!adminUser && !fanniUser) {
+        const techAdminUser = users.find(u => u.role === 'TECH_ADMIN');
         if (techAdminUser) {
           await db.users.update(techAdminUser.id, {
             username: 'admin',
