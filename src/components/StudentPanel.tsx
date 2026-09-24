@@ -3,6 +3,7 @@ import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { CheckCircle, Lock, BarChart2, User as UserIcon, Calendar, Mail, Smartphone } from 'lucide-react';
+import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../utils/assessmentUtils';
 import { StudentSelfAssessment } from './student/StudentSelfAssessment';
 import { StudentProgressChart } from './student/StudentProgressChart';
 import { StudentScreenTimeChart } from './student/StudentScreenTimeChart';
@@ -40,13 +41,13 @@ export function StudentPanel() {
   const todaySubmitted = useLiveQuery(
     async () => {
       if (!currentUser) return true;
-      const today = new Date().toISOString().split('T')[0];
-      const count = await db.assessments
+      const today = getTodayDateStr();
+      const records = await db.assessments
         .where('studentId')
         .equals(currentUser.id)
-        .filter(a => a.date === today)
-        .count();
-      return count > 0;
+        .toArray();
+      const todayRecord = records.find(a => !a.isDeleted && isSameDay(a.date, today));
+      return isAssessmentSubmitted(todayRecord);
     },
     [currentUser?.id]
   );

@@ -62,6 +62,7 @@ export function VicePrincipalUsers() {
       eitaaIdFormatted = `@${eitaaIdFormatted}`;
     }
 
+    const now = getSynchronizedTime();
     await db.users.add({
       id: crypto.randomUUID(),
       firstName: newFirstName.trim(),
@@ -74,7 +75,9 @@ export function VicePrincipalUsers() {
       nationalId: username,
       phone: newPhone.trim(),
       eitaaId: eitaaIdFormatted || undefined,
-      isApproved: true
+      isApproved: true,
+      updatedAt: now,
+      createdAt: new Date(now).toISOString()
     });
 
     setNewFirstName('');
@@ -86,7 +89,7 @@ export function VicePrincipalUsers() {
   };
 
   const handleApproveStudent = async (id: string) => {
-    await db.users.update(id, { isApproved: true });
+    await db.users.update(id, { isApproved: true, updatedAt: getSynchronizedTime() });
     triggerSync();
   };
 

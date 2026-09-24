@@ -4,6 +4,7 @@ import { db } from '../../db';
 import { User } from '../../types';
 import { Bell, Mail, UserPlus, FileText, CheckSquare, AlertCircle, X, CheckCheck, Trash2, Eye } from 'lucide-react';
 import { triggerSync } from '../../sync';
+import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../../utils/assessmentUtils';
 
 interface Props {
   currentUser: User;
@@ -71,7 +72,8 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   const consultStudents = useLiveQuery(
     async () => {
       if (currentUser.role === 'STUDENT') return []; // Never show consultation referrals to students!
-      const students = await db.users.where('role').equals('STUDENT').toArray();
+      const rawStudents = await db.users.where('role').equals('STUDENT').toArray();
+      const students = rawStudents.filter(s => !s.isDeleted);
       const reports = await db.reports.toArray();
 
       const filtered = students.filter(s => {
@@ -111,13 +113,13 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   const todayAssessmentSubmitted = useLiveQuery(
     async () => {
       if (currentUser.role !== 'STUDENT') return true;
-      const today = new Date().toISOString().split('T')[0];
-      const count = await db.assessments
+      const today = getTodayDateStr();
+      const records = await db.assessments
         .where('studentId')
         .equals(currentUser.id)
-        .filter(a => a.date === today)
-        .count();
-      return count > 0;
+        .toArray();
+      const todayRecord = records.find(a => !a.isDeleted && isSameDay(a.date, today));
+      return isAssessmentSubmitted(todayRecord);
     },
     [currentUser.id, currentUser.role]
   );

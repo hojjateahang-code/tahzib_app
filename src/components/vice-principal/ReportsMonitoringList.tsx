@@ -13,21 +13,7 @@ import { exportToExcel, triggerPrint, exportElementAsImage } from '../../lib/exp
 import { StudentDetailModal } from '../common/StudentDetailModal';
 import { ReportContentDisplay } from '../common/ReportContentDisplay';
 import { getReportAuthorInfo } from '../../utils/reportUtils';
-
-function getAssessmentScore(a: any): number {
-  if (!a) return 70;
-  if (typeof a.score === 'number') return a.score;
-  let score = 50;
-  const prayers = [a.namazSobh, a.namazZohr, a.namazAsr, a.namazMaghreb, a.namazEsha];
-  prayers.forEach(p => {
-    if (p === 'ADA_JAMAAT') score += 8;
-    else if (p === 'ADA_FORADA') score += 6;
-  });
-  if (a.saharKhizi) score += 5;
-  if (a.telavatNoor) score += 5;
-  if (a.classAttendance === true || a.classAttendance === 'FULL') score += 5;
-  return Math.min(100, score);
-}
+import { getAssessmentScore, isAssessmentSubmitted, getTodayDateStr, isSameDay } from '../../utils/assessmentUtils';
 
 export function ReportsMonitoringList() {
   // Navigation Tabs
@@ -45,13 +31,25 @@ export function ReportsMonitoringList() {
   // DB Data Queries
   const students = useLiveQuery(async () => {
     const users = await db.users.where('role').equals('STUDENT').toArray();
-    return users.filter(u => u.isApproved);
+    return users.filter(u => u.isApproved && !u.isDeleted);
   });
 
-  const mentors = useLiveQuery(() => db.users.where('role').equals('MENTOR').toArray());
-  const reports = useLiveQuery(() => db.reports.reverse().sortBy('date'));
-  const allSelfAssessments = useLiveQuery(() => db.assessments.toArray());
-  const allUsers = useLiveQuery(() => db.users.toArray());
+  const mentors = useLiveQuery(async () => {
+    const users = await db.users.where('role').equals('MENTOR').toArray();
+    return users.filter(u => !u.isDeleted);
+  });
+  const reports = useLiveQuery(async () => {
+    const list = await db.reports.reverse().sortBy('date');
+    return list.filter(r => !r.isDeleted);
+  });
+  const allSelfAssessments = useLiveQuery(async () => {
+    const list = await db.assessments.toArray();
+    return list.filter(a => !a.isDeleted && isAssessmentSubmitted(a));
+  });
+  const allUsers = useLiveQuery(async () => {
+    const list = await db.users.toArray();
+    return list.filter(u => !u.isDeleted);
+  });
 
   // Filtered Students List according to controls
   const filteredStudents = useMemo(() => {

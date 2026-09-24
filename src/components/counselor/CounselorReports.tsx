@@ -14,15 +14,17 @@ export function CounselorReports() {
   const [sessionNotes, setSessionNotes] = useState('');
   const [viewStudentId, setViewStudentId] = useState<string | null>(null);
   
-  const students = useLiveQuery(() => db.users.where({ role: 'STUDENT' }).toArray());
+  const rawStudents = useLiveQuery(() => db.users.where({ role: 'STUDENT' }).toArray());
+  const students = React.useMemo(() => rawStudents?.filter(u => !u.isDeleted && u.isApproved), [rawStudents]);
   const allReports = useLiveQuery(
     () => db.reports.where('type').equals('COUNSELING_SESSION').reverse().sortBy('date'),
     []
   );
-  const reports = allReports?.filter(r => r.authorId === currentUser?.id) || [];
-  const referralReports = allReports?.filter(r => r.authorId !== currentUser?.id) || [];
+  const reports = allReports?.filter(r => !r.isDeleted && r.authorId === currentUser?.id) || [];
+  const referralReports = allReports?.filter(r => !r.isDeleted && r.authorId !== currentUser?.id) || [];
   
-  const allUsers = useLiveQuery(() => db.users.toArray());
+  const rawAllUsers = useLiveQuery(() => db.users.toArray());
+  const allUsers = React.useMemo(() => rawAllUsers?.filter(u => !u.isDeleted), [rawAllUsers]);
 
   const handleSaveSession = async () => {
     if (!currentUser || !selectedStudentId || !sessionNotes.trim()) return;

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { useAuth } from '../../store';
 import { User, Assessment } from '../../types';
+import { isAssessmentSubmitted } from '../../utils/assessmentUtils';
 import { 
   AlertTriangle, ShieldAlert, Clock, ChevronDown, ChevronUp, 
   UserX, AlertCircle, Eye, ArrowLeft, BellRing
@@ -28,9 +29,12 @@ export function StudentEscalationAlerts({ onSelectStudent, roleOverride }: Stude
   const userRole = roleOverride || currentUser?.role || 'MENTOR';
 
   const alertsData = useLiveQuery(async () => {
-    const students = await db.users.where('role').equals('STUDENT').toArray();
-    const allAssessments = await db.assessments.toArray();
-    const mentors = await db.users.where('role').equals('MENTOR').toArray();
+    const rawStudents = await db.users.where('role').equals('STUDENT').toArray();
+    const students = rawStudents.filter(u => !u.isDeleted && u.isApproved);
+    const rawAssessments = await db.assessments.toArray();
+    const allAssessments = rawAssessments.filter(a => !a.isDeleted && isAssessmentSubmitted(a));
+    const rawMentors = await db.users.where('role').equals('MENTOR').toArray();
+    const mentors = rawMentors.filter(u => !u.isDeleted);
 
     const mentorMap = new Map<string, string>();
     mentors.forEach(m => mentorMap.set(m.id, m.name));

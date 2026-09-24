@@ -49,19 +49,27 @@ export default function App() {
 
     const interval = setInterval(() => {
       syncMinIOData().catch(() => null);
-    }, 25000);
+    }, 15000);
 
     const handleReactivate = () => {
       syncMinIOData().catch(() => null);
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleReactivate();
+      }
+    };
+
     window.addEventListener('focus', handleReactivate);
     window.addEventListener('online', handleReactivate);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleReactivate);
       window.removeEventListener('online', handleReactivate);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [currentUser?.id]);
 

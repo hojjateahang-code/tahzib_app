@@ -186,17 +186,65 @@ app.get("/api/sync/status", async (req, res) => {
   }
 });
 
+function mergeServerDatasets(master: any, incoming: any) {
+  if (!master) master = {};
+  if (!master.data) master.data = {};
+  const inData = incoming?.data || incoming || {};
+
+  const entities = ['users', 'tasks', 'assessments', 'reports', 'personalHabits', 'appointments', 'messages', 'customGroups', 'privateNotes'];
+  for (const entity of entities) {
+    const existingList = Array.isArray(master.data[entity]) ? master.data[entity] : [];
+    const incomingList = Array.isArray(inData[entity]) ? inData[entity] : [];
+    if (incomingList.length > 0 || existingList.length > 0) {
+      const map = new Map<string, any>();
+      for (const item of existingList) {
+        if (item && item.id) map.set(item.id, { ...item });
+      }
+      for (const item of incomingList) {
+        if (!item || !item.id) continue;
+        const prev = map.get(item.id);
+        if (!prev) {
+          map.set(item.id, { ...item });
+        } else {
+          const prevTime = prev.updatedAt || 0;
+          const itemTime = item.updatedAt || 0;
+          let winning: any;
+          if (itemTime >= prevTime) {
+            winning = { ...prev, ...item };
+          } else {
+            winning = { ...item, ...prev };
+          }
+          if (item.isDeleted && itemTime >= prevTime) {
+            winning.isDeleted = true;
+          } else if (prev.isDeleted && prevTime >= itemTime) {
+            winning.isDeleted = true;
+          } else if (item.isDeleted || prev.isDeleted) {
+            winning.isDeleted = true;
+          }
+          map.set(item.id, winning);
+        }
+      }
+      master.data[entity] = Array.from(map.values());
+    }
+  }
+  master.app = 'TahzibApp';
+  master.version = 1;
+  master.exportedAt = new Date().toISOString();
+  return master;
+}
+
 // API Route: Backup/Sync Data Upload
 app.post("/api/sync/upload", async (req, res) => {
   try {
     const { key, data } = req.body;
     const jsonString = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+    const parsedData = typeof data === "string" ? JSON.parse(data) : data;
 
     const relativePath = key || "backups/latest.json";
     const cleanRelPath = relativePath.replace(/^tahzibApp\//, "").replace(/^\/+/, "");
     const localFilePath = path.join(STORAGE_PATH, cleanRelPath);
 
-    // 1. Save to Local Disk
+    // 1. Save device file to Local Disk
     fs.mkdirSync(path.dirname(localFilePath), { recursive: true });
     fs.writeFileSync(localFilePath, jsonString, "utf-8");
 
@@ -207,7 +255,21 @@ app.post("/api/sync/upload", async (req, res) => {
       fs.writeFileSync(backupCopyPath, jsonString, "utf-8");
     }
 
-    // 2. Upload to MinIO Cloud if configured
+    // 2. Server-side Master Consolidation into latest.json
+    const latestFilePath = path.join(BACKUPS_DIR, "latest.json");
+    let masterData: any = {};
+    if (fs.existsSync(latestFilePath)) {
+      try {
+        masterData = JSON.parse(fs.readFileSync(latestFilePath, "utf-8"));
+      } catch (e) {
+        masterData = {};
+      }
+    }
+    const updatedMaster = mergeServerDatasets(masterData, parsedData);
+    const updatedMasterStr = JSON.stringify(updatedMaster, null, 2);
+    fs.writeFileSync(latestFilePath, updatedMasterStr, "utf-8");
+
+    // 3. Upload to MinIO Cloud if configured
     const accessKey = (process.env.MINIO_ACCESS_KEY_ID || "").trim();
     const secretKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim();
 
@@ -217,10 +279,20 @@ app.post("/api/sync/upload", async (req, res) => {
         const objectKey = cleanRelPath.startsWith(prefix) ? cleanRelPath : `${prefix}${cleanRelPath}`;
         const s3 = getS3Client();
 
+        // Put device backup
         await s3.send(new PutObjectCommand({
           Bucket: bucket,
           Key: objectKey,
           Body: jsonString,
+          ContentType: "application/json",
+        }));
+
+        // Put consolidated latest.json
+        const latestObjectKey = `${prefix}backups/latest.json`;
+        await s3.send(new PutObjectCommand({
+          Bucket: bucket,
+          Key: latestObjectKey,
+          Body: updatedMasterStr,
           ContentType: "application/json",
         }));
 

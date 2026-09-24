@@ -80,10 +80,12 @@ function mergeEntityArrays<T extends BaseEntity & { id: string }>(
         losing = { ...incoming };
       }
 
-      // Preserve tombstone if newer record is deleted
-      if (incomingTime >= localTime && incoming.isDeleted) {
+      // Preserve tombstone: deletion takes precedence unless explicitly overwritten by a newer non-deleted version
+      if (incoming.isDeleted && incomingTime >= localTime) {
         winning.isDeleted = true;
-      } else if (localTime > incomingTime && existing.isDeleted) {
+      } else if (existing.isDeleted && localTime >= incomingTime) {
+        winning.isDeleted = true;
+      } else if (incoming.isDeleted || existing.isDeleted) {
         winning.isDeleted = true;
       }
 

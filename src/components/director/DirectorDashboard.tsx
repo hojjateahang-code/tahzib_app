@@ -8,6 +8,7 @@ import { User, Report, Assessment } from '../../types';
 import { StudentEscalationAlerts } from '../supervisor/StudentEscalationAlerts';
 import { ReportContentDisplay } from '../common/ReportContentDisplay';
 import { getReportAuthorInfo } from '../../utils/reportUtils';
+import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../../utils/assessmentUtils';
 
 interface DirectorDashboardProps {
   onNavigate?: (tab: 'STUDENTS' | 'MESSAGES' | 'PROFILE', subTab?: 'STUDENTS' | 'MENTORS' | 'REPORTS') => void;
@@ -23,19 +24,22 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
   const allUsers = useMemo(() => rawAllUsers?.filter(u => !u.isDeleted), [rawAllUsers]);
   const students = useMemo(() => allUsers?.filter(u => u.role === 'STUDENT'), [allUsers]);
   const mentors = useMemo(() => allUsers?.filter(u => u.role === 'MENTOR'), [allUsers]);
-  const assessments = useLiveQuery(() => db.assessments.toArray());
-  const reports = useLiveQuery(() => db.reports.toArray());
-  const messages = useLiveQuery(() => db.messages.toArray());
+  const rawAssessments = useLiveQuery(() => db.assessments.toArray());
+  const assessments = useMemo(() => rawAssessments?.filter(a => !a.isDeleted), [rawAssessments]);
+  const rawReports = useLiveQuery(() => db.reports.toArray());
+  const reports = useMemo(() => rawReports?.filter(r => !r.isDeleted), [rawReports]);
+  const rawMessages = useLiveQuery(() => db.messages.toArray());
+  const messages = useMemo(() => rawMessages?.filter(m => !m.isDeleted), [rawMessages]);
 
   // Calculations for Today
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => getTodayDateStr(), []);
 
-  // Today's assessments map
+  // Today's assessments map (only actual filled submissions)
   const todayAssessmentsStudentIds = useMemo(() => {
     if (!assessments) return new Set<string>();
     return new Set(
       assessments
-        .filter(a => a.date === todayStr || (a.date && a.date.startsWith(todayStr)))
+        .filter(a => isSameDay(a.date, todayStr) && isAssessmentSubmitted(a))
         .map(a => a.studentId)
     );
   }, [assessments, todayStr]);

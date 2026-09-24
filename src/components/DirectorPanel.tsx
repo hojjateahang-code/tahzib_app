@@ -42,7 +42,7 @@ export function DirectorPanel() {
   const consultStudentsCount = useLiveQuery(
     async () => {
       const students = await db.users.where('role').equals('STUDENT').toArray();
-      return students.filter(s => s.counselorTags?.includes('CONSULT_NEEDED')).length;
+      return students.filter(s => !s.isDeleted && s.counselorTags?.includes('CONSULT_NEEDED')).length;
     },
     []
   );

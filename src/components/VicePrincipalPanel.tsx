@@ -41,7 +41,7 @@ export function VicePrincipalPanel() {
   const pendingUsersCount = useLiveQuery(
     async () => {
       const users = await db.users.toArray();
-      return users.filter(u => !u.isApproved).length;
+      return users.filter(u => !u.isApproved && !u.isDeleted).length;
     },
     []
   );
