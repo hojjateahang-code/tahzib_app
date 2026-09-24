@@ -500,20 +500,6 @@ const toEnglishDigits = (str: string): string => {
                 <LogIn className="w-5 h-5" />
                 ورود به سامانه
               </button>
-
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsername('admin');
-                    setPassword('admin123');
-                    setError('');
-                  }}
-                  className="text-xs text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer py-1"
-                >
-                  ورود سریع مسئول فنی (admin / admin123)
-                </button>
-              </div>
             </form>
           )}
 
