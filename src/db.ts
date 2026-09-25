@@ -144,6 +144,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     description: 'بیداری و عبادات سحرگاهی پیش از اذان صبح',
     category: 'عبادی',
     inputType: 'BOOLEAN',
+    order: 1,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -154,6 +155,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     category: 'عبادی',
     inputType: 'NUMERIC',
     unit: 'صفحه',
+    order: 2,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -164,6 +166,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     category: 'آموزشی',
     inputType: 'MULTICHOICE',
     options: ['کامل', 'ناقص (با تاخیر یا غیبت)', 'عدم شرکت'],
+    order: 3,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -174,6 +177,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     category: 'آموزشی',
     inputType: 'MULTICHOICE',
     options: ['کامل', 'ناقص', 'انجام نشد'],
+    order: 4,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -183,6 +187,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     description: 'استراحت به موقع شبانه جهت آمادگی سحر و کلاس‌ها',
     category: 'عمومی',
     inputType: 'BOOLEAN',
+    order: 5,
     isActive: true,
     createdAt: new Date().toISOString()
   }

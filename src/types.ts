@@ -68,6 +68,7 @@ export interface TahzibProgram extends BaseEntity {
   options?: string[]; // e.g. ["کامل", "ناقص", "انجام نشد"]
   unit?: string; // e.g. 'صفحه', 'دقیقه', 'بار'
   targetBases?: number[]; // e.g. [1, 2, 3] or [] for ALL bases
+  order?: number; // Display sequence order
   isActive: boolean;
   createdAt: string;
   createdBy?: string;

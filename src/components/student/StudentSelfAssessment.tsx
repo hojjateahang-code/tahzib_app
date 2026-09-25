@@ -95,18 +95,20 @@ export function StudentSelfAssessment() {
     if (!currentUser) return [];
     const studentBase = Number(currentUser.base) || 1;
 
-    return allTahzibPrograms.filter(prog => {
-      const matchesBase = !prog.targetBases || prog.targetBases.length === 0 || prog.targetBases.map(Number).includes(studentBase);
-      const hasAnswerOnDate = assessment?.tahzibProgramAnswers?.[prog.id] !== undefined;
+    return allTahzibPrograms
+      .filter(prog => {
+        const matchesBase = !prog.targetBases || prog.targetBases.length === 0 || prog.targetBases.map(Number).includes(studentBase);
+        const hasAnswerOnDate = assessment?.tahzibProgramAnswers?.[prog.id] !== undefined;
 
-      if (prog.isDeleted) {
-        return hasAnswerOnDate; // Always keep past assessment history
-      }
-      
-      if (!matchesBase) return false;
+        if (prog.isDeleted) {
+          return hasAnswerOnDate; // Always keep past assessment history
+        }
+        
+        if (!matchesBase) return false;
 
-      return prog.isActive || hasAnswerOnDate;
-    });
+        return prog.isActive || hasAnswerOnDate;
+      })
+      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
   }, [allTahzibPrograms, currentUser, assessment?.tahzibProgramAnswers]);
 
   const updateTahzibProgramAnswer = async (programId: string, value: boolean | string | number) => {

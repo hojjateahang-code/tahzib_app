@@ -165,7 +165,7 @@ export function StudentAssessmentDetails({ studentId }: Props) {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
               {/* Render Vice Principal defined Tahzib Programs */}
-              {tahzibPrograms.map(prog => {
+              {[...tahzibPrograms].sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(prog => {
                 const answer = activeAssessment.tahzibProgramAnswers?.[prog.id] !== undefined
                   ? activeAssessment.tahzibProgramAnswers[prog.id]
                   : (activeAssessment as any)[prog.id];
