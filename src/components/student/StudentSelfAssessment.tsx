@@ -93,15 +93,18 @@ export function StudentSelfAssessment() {
 
   const visibleTahzibPrograms = useMemo(() => {
     if (!currentUser) return [];
-    const studentBase = currentUser.base || 1;
+    const studentBase = Number(currentUser.base) || 1;
 
     return allTahzibPrograms.filter(prog => {
-      if (prog.isDeleted) return false;
+      const matchesBase = !prog.targetBases || prog.targetBases.length === 0 || prog.targetBases.map(Number).includes(studentBase);
+      const hasAnswerOnDate = assessment?.tahzibProgramAnswers?.[prog.id] !== undefined;
+
+      if (prog.isDeleted) {
+        return hasAnswerOnDate; // Always keep past assessment history
+      }
       
-      const matchesBase = !prog.targetBases || prog.targetBases.length === 0 || prog.targetBases.includes(studentBase);
       if (!matchesBase) return false;
 
-      const hasAnswerOnDate = assessment?.tahzibProgramAnswers?.[prog.id] !== undefined;
       return prog.isActive || hasAnswerOnDate;
     });
   }, [allTahzibPrograms, currentUser, assessment?.tahzibProgramAnswers]);
@@ -850,7 +853,14 @@ export function StudentSelfAssessment() {
             onClick={() => toggleSection('standard')}
             className="w-full flex justify-between items-center p-5 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100/50 dark:hover:bg-blue-900/50 transition-colors"
           >
-            <h3 className="font-bold text-blue-900 dark:text-blue-200">سایر برنامه‌های تهذیبی</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-blue-900 dark:text-blue-200">امورات و برنامه‌های تهذیبی</h3>
+              {visibleTahzibPrograms.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-100">
+                  {visibleTahzibPrograms.length} مورد
+                </span>
+              )}
+            </div>
             {expandedSection === 'standard' ? <ChevronUp className="w-5 h-5 text-blue-700 dark:text-blue-300" /> : <ChevronDown className="w-5 h-5 text-blue-700 dark:text-blue-300" />}
           </button>
           
@@ -858,7 +868,7 @@ export function StudentSelfAssessment() {
             <div className="p-5 space-y-3">
               {visibleTahzibPrograms.length === 0 ? (
                 <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                  برنامه تهذیبی جدیدی تعریف نشده است.
+                  برنامه تهذیبی تعریف نشده است.
                 </div>
               ) : (
                 visibleTahzibPrograms.map(prog => {
@@ -869,13 +879,18 @@ export function StudentSelfAssessment() {
                   return (
                     <div key={prog.id} className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center gap-3">
                       <div className="flex flex-col gap-1 md:w-5/12">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
                             {prog.title}:
                           </span>
                           {prog.category && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200">
                               {prog.category}
+                            </span>
+                          )}
+                          {prog.isDeleted && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                              غیرفعال (حفظ سابقه)
                             </span>
                           )}
                         </div>

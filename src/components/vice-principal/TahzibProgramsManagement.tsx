@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db } from '../../db';
+import { db, DEFAULT_TAHZIB_CATEGORIES } from '../../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Sparkles, 
@@ -10,68 +10,86 @@ import {
   XCircle, 
   Layers, 
   Search, 
-  Info, 
   ShieldCheck, 
   ListChecks, 
-  Hash, 
-  FileText, 
-  Sliders, 
   ToggleLeft, 
   ToggleRight,
-  Eye,
   Check,
-  X
+  X,
+  FolderPlus,
+  Settings2,
+  Tag
 } from 'lucide-react';
 import { triggerSync, getSynchronizedTime } from '../../sync';
-import type { TahzibProgram } from '../../types';
+import type { TahzibProgram, TahzibCategory } from '../../types';
 
 export function TahzibProgramsManagement() {
+  // Live Query for Programs & Categories
   const rawPrograms = useLiveQuery(() => db.tahzibPrograms.toArray()) || [];
   const activePrograms = rawPrograms.filter(p => !p.isDeleted);
+
+  const rawCategories = useLiveQuery(() => db.tahzibCategories.toArray()) || [];
+  const activeCategories = rawCategories.filter(c => !c.isDeleted);
+
+  // Category names list derived from DB, with fallback to default categories
+  const categoryNames = activeCategories.length > 0
+    ? activeCategories.map(c => c.name)
+    : DEFAULT_TAHZIB_CATEGORIES.map(c => c.name);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Form & Modal States
-  const [showModal, setShowModal] = useState<boolean>(false);
+  // Program Form & Modal States
+  const [showProgramModal, setShowProgramModal] = useState<boolean>(false);
   const [editingProgram, setEditingProgram] = useState<TahzibProgram | null>(null);
 
-  // Form Fields
+  // Program Form Fields
   const [formTitle, setFormTitle] = useState<string>('');
   const [formDescription, setFormDescription] = useState<string>('');
   const [formCategory, setFormCategory] = useState<string>('عبادی');
+  const [isCustomCategoryInput, setIsCustomCategoryInput] = useState<boolean>(false);
+  const [customCategoryName, setCustomCategoryName] = useState<string>('');
   const [formInputType, setFormInputType] = useState<'BOOLEAN' | 'MULTICHOICE' | 'NUMERIC' | 'TEXT'>('BOOLEAN');
   const [formOptions, setFormOptions] = useState<string>('کامل, ناقص, انجام نشد');
   const [formUnit, setFormUnit] = useState<string>('صفحه');
   const [formTargetBases, setFormTargetBases] = useState<number[]>([]); // empty = ALL
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
 
-  const categories = ['عبادی', 'اخلاقی', 'آموزشی', 'عمومی'];
+  // Category Management Modal State
+  const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
+  const [newCatName, setNewCatName] = useState<string>('');
+  const [editingCategory, setEditingCategory] = useState<TahzibCategory | null>(null);
+  const [editCatName, setEditCatName] = useState<string>('');
 
-  const openCreateModal = () => {
+  // Handlers for Program Modal
+  const openCreateProgramModal = () => {
     setEditingProgram(null);
     setFormTitle('');
     setFormDescription('');
-    setFormCategory('عبادی');
+    setFormCategory(categoryNames[0] || 'عبادی');
+    setIsCustomCategoryInput(false);
+    setCustomCategoryName('');
     setFormInputType('BOOLEAN');
     setFormOptions('عالی, خوب, متوسط, انجام نشد');
     setFormUnit('صفحه');
     setFormTargetBases([]);
     setFormIsActive(true);
-    setShowModal(true);
+    setShowProgramModal(true);
   };
 
-  const openEditModal = (prog: TahzibProgram) => {
+  const openEditProgramModal = (prog: TahzibProgram) => {
     setEditingProgram(prog);
     setFormTitle(prog.title || '');
     setFormDescription(prog.description || '');
     setFormCategory(prog.category || 'عبادی');
+    setIsCustomCategoryInput(false);
+    setCustomCategoryName('');
     setFormInputType(prog.inputType || 'BOOLEAN');
     setFormOptions(prog.options && prog.options.length > 0 ? prog.options.join(', ') : 'عالی, خوب, متوسط, انجام نشد');
     setFormUnit(prog.unit || 'صفحه');
     setFormTargetBases(prog.targetBases || []);
     setFormIsActive(prog.isActive !== false);
-    setShowModal(true);
+    setShowProgramModal(true);
   };
 
   const handleSaveProgram = async (e: React.FormEvent) => {
@@ -82,6 +100,31 @@ export function TahzibProgramsManagement() {
     }
 
     const now = getSynchronizedTime();
+
+    // Determine final category name
+    let finalCategory = formCategory;
+    if (isCustomCategoryInput || formCategory === '__NEW__') {
+      const trimmedCustomCat = customCategoryName.trim();
+      if (!trimmedCustomCat) {
+        alert('لطفاً نام دسته‌بندی جدید را وارد نمایید.');
+        return;
+      }
+      finalCategory = trimmedCustomCat;
+
+      // Automatically add this new category to db.tahzibCategories if it doesn't exist
+      const existingCat = activeCategories.find(c => c.name.trim() === trimmedCustomCat);
+      if (!existingCat) {
+        const newCat: TahzibCategory = {
+          id: 'cat_' + crypto.randomUUID(),
+          name: trimmedCustomCat,
+          order: activeCategories.length + 1,
+          createdAt: new Date(now).toISOString(),
+          updatedAt: now
+        };
+        await db.tahzibCategories.add(newCat);
+      }
+    }
+
     const parsedOptions = formInputType === 'MULTICHOICE'
       ? formOptions.split(',').map(s => s.trim()).filter(Boolean)
       : undefined;
@@ -90,7 +133,7 @@ export function TahzibProgramsManagement() {
       await db.tahzibPrograms.update(editingProgram.id, {
         title: formTitle.trim(),
         description: formDescription.trim() || undefined,
-        category: formCategory,
+        category: finalCategory,
         inputType: formInputType,
         options: parsedOptions,
         unit: formInputType === 'NUMERIC' ? (formUnit.trim() || 'عدد') : undefined,
@@ -103,7 +146,7 @@ export function TahzibProgramsManagement() {
         id: 'prog_' + crypto.randomUUID(),
         title: formTitle.trim(),
         description: formDescription.trim() || undefined,
-        category: formCategory,
+        category: finalCategory,
         inputType: formInputType,
         options: parsedOptions,
         unit: formInputType === 'NUMERIC' ? (formUnit.trim() || 'عدد') : undefined,
@@ -115,7 +158,7 @@ export function TahzibProgramsManagement() {
       await db.tahzibPrograms.add(newProgram);
     }
 
-    setShowModal(false);
+    setShowProgramModal(false);
     triggerSync();
   };
 
@@ -145,6 +188,76 @@ export function TahzibProgramsManagement() {
     );
   };
 
+  // Handlers for Category Management
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCatName.trim();
+    if (!trimmed) return;
+
+    const existing = activeCategories.find(c => c.name.trim() === trimmed);
+    if (existing) {
+      alert('این دسته‌بندی قبلاً اضافه شده است.');
+      return;
+    }
+
+    const now = getSynchronizedTime();
+    const newCat: TahzibCategory = {
+      id: 'cat_' + crypto.randomUUID(),
+      name: trimmed,
+      order: activeCategories.length + 1,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: now
+    };
+
+    await db.tahzibCategories.add(newCat);
+    setNewCatName('');
+    triggerSync();
+  };
+
+  const handleSaveEditCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    const trimmed = editCatName.trim();
+    if (!trimmed) return;
+
+    const now = getSynchronizedTime();
+
+    // Update programs that were using old category name if needed
+    const oldName = editingCategory.name;
+    await db.tahzibCategories.update(editingCategory.id, {
+      name: trimmed,
+      updatedAt: now
+    });
+
+    // Update matching programs to new category name
+    const matchingProgs = rawPrograms.filter(p => p.category === oldName);
+    for (const p of matchingProgs) {
+      await db.tahzibPrograms.update(p.id, { category: trimmed, updatedAt: now });
+    }
+
+    setEditingCategory(null);
+    setEditCatName('');
+    triggerSync();
+  };
+
+  const handleDeleteCategory = async (cat: TahzibCategory) => {
+    const progsInCat = activePrograms.filter(p => p.category === cat.name);
+    if (progsInCat.length > 0) {
+      if (!confirm(`در حال حاضر ${progsInCat.length} برنامه در دسته‌بندی «${cat.name}» وجود دارد. آیا از حذف این دسته‌بندی اطمینان دارید؟`)) {
+        return;
+      }
+    } else {
+      if (!confirm(`آیا از حذف دسته‌بندی «${cat.name}» اطمینان دارید؟`)) return;
+    }
+
+    const now = getSynchronizedTime();
+    await db.tahzibCategories.update(cat.id, {
+      isDeleted: true,
+      updatedAt: now
+    });
+    triggerSync();
+  };
+
   const filteredPrograms = activePrograms.filter(prog => {
     if (selectedCategory !== 'ALL' && prog.category !== selectedCategory) {
       return false;
@@ -160,7 +273,7 @@ export function TahzibProgramsManagement() {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200 dir-rtl">
       
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
@@ -171,25 +284,36 @@ export function TahzibProgramsManagement() {
               <span>مدیریت و تعریف امورات و برنامه‌های تهذیبی</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              تنظیم برنامه‌های روزانه تهذیبی جهت نمایش در فرم خودارزیابی طلاب و گروه‌بندی پایه‌ها
+              تنظیم برنامه‌های روزانه تهذیبی، افزودن دسته‌بندی‌های جدید و تعیین نوع ثبت وضعیت توسط طلاب
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تعریف برنامه تهذیبی جدید</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowCategoryModal(true)}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 border border-slate-200/80 dark:border-slate-700"
+            >
+              <Tag className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>مدیریت دسته‌بندی‌ها ({categoryNames.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openCreateProgramModal}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>تعریف برنامه تهذیبی جدید</span>
+            </button>
+          </div>
         </div>
 
         {/* Security & History Retention Guaranty Banner */}
         <div className="p-3.5 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl flex items-center gap-3 text-xs text-emerald-900 dark:text-emerald-200">
           <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <p className="font-medium leading-relaxed">
-            <strong>تضمین حفظ سوابق:</strong> هرگونه تغییر، غیرفعال‌سازی یا حذف نرم‌افزاری برنامه‌های تهذیبی هیچ آسیبی به سوابق و تاریخچه ارزیابی‌های ثبت‌شده قبلی طلاب نمی‌زند و اطلاعات گذشته کاملاً در سامانه محفوظ است.
+            <strong>تضمین حفظ سوابق:</strong> با ویرایش، غیرفعال‌سازی یا حذف برنامه‌ها، کلیه ارزیابی‌ها و گزارش‌های قبلی طلاب دست‌نخورده و محفوظ باقی می‌مانند و سوابق گذشته هرگز از سامانه پاک نخواهند شد.
           </p>
         </div>
 
@@ -208,7 +332,8 @@ export function TahzibProgramsManagement() {
             >
               همه عناوین ({activePrograms.length})
             </button>
-            {categories.map(cat => {
+
+            {categoryNames.map(cat => {
               const count = activePrograms.filter(p => p.category === cat).length;
               return (
                 <button
@@ -247,11 +372,11 @@ export function TahzibProgramsManagement() {
           <ListChecks className="w-16 h-16 text-slate-300 dark:text-slate-700 mb-3" />
           <h3 className="font-bold text-slate-700 dark:text-slate-300 text-base mb-1">هیچ برنامه تهذیبی یافت نشد</h3>
           <p className="text-xs text-slate-400 max-w-sm mb-4">
-            می‌توانید با دکمه زیر برنامه جدیدی (عبادی، اخلاقی، آموزشی...) برای فرم خودارزیابی طلاب تعریف کنید.
+            می‌توانید با دکمه زیر برنامه جدیدی (عبادی، اخلاقی، عبادی سیاسی، آموزشی...) برای فرم خودارزیابی طلاب تعریف کنید.
           </p>
           <button
             type="button"
-            onClick={openCreateModal}
+            onClick={openCreateProgramModal}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
             تعریف برنامه جدید
@@ -353,7 +478,7 @@ export function TahzibProgramsManagement() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => openEditModal(prog)}
+                    onClick={() => openEditProgramModal(prog)}
                     className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-xl transition-colors cursor-pointer"
                     title="ویرایش برنامه"
                   >
@@ -375,7 +500,7 @@ export function TahzibProgramsManagement() {
       )}
 
       {/* Program Create/Edit Modal */}
-      {showModal && (
+      {showProgramModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 dark:bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl">
           <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl border border-slate-200 dark:border-slate-800 w-full max-w-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">
@@ -385,7 +510,7 @@ export function TahzibProgramsManagement() {
               </h3>
               <button
                 type="button"
-                onClick={() => setShowModal(false)}
+                onClick={() => setShowProgramModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-xl cursor-pointer"
               >
                 ×
@@ -401,7 +526,7 @@ export function TahzibProgramsManagement() {
                 <input
                   type="text"
                   required
-                  placeholder="مثلاً: تلاوت نور، زیارت عاشورا، ورزش صبحگاهی، مطالعه کتاب اخلاق..."
+                  placeholder="مثلاً: تلاوت نور، شرکت در نماز جمعه، تحلیل سیاسی هفته، ورزش صبحگاهی..."
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
@@ -426,15 +551,36 @@ export function TahzibProgramsManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    دسته‌بندی:
+                    دسته‌بندی برنامه:
                   </label>
                   <select
-                    value={formCategory}
-                    onChange={e => setFormCategory(e.target.value)}
+                    value={isCustomCategoryInput ? '__NEW__' : formCategory}
+                    onChange={e => {
+                      if (e.target.value === '__NEW__') {
+                        setIsCustomCategoryInput(true);
+                      } else {
+                        setIsCustomCategoryInput(false);
+                        setFormCategory(e.target.value);
+                      }
+                    }}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
                   >
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categoryNames.map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="__NEW__">+ افزودن دسته‌بندی جدید (مثلاً: عبادی سیاسی)</option>
                   </select>
+
+                  {isCustomCategoryInput && (
+                    <div className="mt-2 animate-in fade-in duration-150">
+                      <input
+                        type="text"
+                        required
+                        placeholder="نام دسته‌بندی جدید را بنویسید (مثلاً: عبادی سیاسی)..."
+                        value={customCategoryName}
+                        onChange={e => setCustomCategoryName(e.target.value)}
+                        className="w-full bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-900 dark:text-indigo-100"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -463,7 +609,7 @@ export function TahzibProgramsManagement() {
                   <input
                     type="text"
                     required
-                    placeholder="مثلاً: کامل, ناقص, انجام نشد  یا  عالی, خوب, متوسط, انجام نشد"
+                    placeholder="مثلاً: کامل, ناقص, انجام نشد  یا  شرکت کردم, نرفتم"
                     value={formOptions}
                     onChange={e => setFormOptions(e.target.value)}
                     className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
@@ -479,7 +625,7 @@ export function TahzibProgramsManagement() {
                   <input
                     type="text"
                     required
-                    placeholder="مثلاً: صفحه، دقیقه، بار، ساعت، مرتبه..."
+                    placeholder="مثلاً: صفحه، دقیقه، بار، ساعت، جلسه..."
                     value={formUnit}
                     onChange={e => setFormUnit(e.target.value)}
                     className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
@@ -547,13 +693,149 @@ export function TahzibProgramsManagement() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowProgramModal(false)}
                   className="px-5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
                   انصراف
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 dark:bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 dir-rtl">
+          <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-3xl border border-slate-200 dark:border-slate-800 w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-black text-base flex items-center gap-2">
+                <Tag className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span>مدیریت دسته‌بندی‌های امورات تهذیبی</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setEditingCategory(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-xl cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Add New Category Form */}
+            <form onSubmit={handleAddCategory} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="عنوان دسته‌بندی جدید (مثلاً: عبادی سیاسی)..."
+                value={newCatName}
+                onChange={e => setNewCatName(e.target.value)}
+                className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>افزودن</span>
+              </button>
+            </form>
+
+            {/* Existing Categories List */}
+            <div className="space-y-2 pt-2">
+              <h4 className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                دسته‌بندی‌های فعال در سامانه:
+              </h4>
+
+              {activeCategories.length === 0 ? (
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs text-slate-500 text-center">
+                  دسته‌بندی‌های پیش‌فرض سامانه: {DEFAULT_TAHZIB_CATEGORIES.map(c => c.name).join('، ')}
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {activeCategories.map(cat => {
+                    const progCount = activePrograms.filter(p => p.category === cat.name).length;
+                    const isEditing = editingCategory?.id === cat.id;
+
+                    return (
+                      <div
+                        key={cat.id}
+                        className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700 flex items-center justify-between gap-2"
+                      >
+                        {isEditing ? (
+                          <form onSubmit={handleSaveEditCategory} className="flex items-center gap-2 w-full">
+                            <input
+                              type="text"
+                              value={editCatName}
+                              onChange={e => setEditCatName(e.target.value)}
+                              className="flex-1 bg-white dark:bg-slate-900 border border-indigo-400 rounded-lg p-1.5 text-xs font-bold outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingCategory(null)}
+                              className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </form>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-xs text-slate-800 dark:text-slate-100">
+                                {cat.name}
+                              </span>
+                              <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full font-bold">
+                                {progCount} برنامه
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingCategory(cat);
+                                  setEditCatName(cat.name);
+                                }}
+                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-lg cursor-pointer"
+                                title="ویرایش عنوان دسته‌بندی"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(cat)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-lg cursor-pointer"
+                                title="حذف دسته‌بندی"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-left">
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(false)}
+                className="px-5 py-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                بستن
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -51,6 +51,14 @@ export interface Task extends BaseEntity {
   }>>;
 }
 
+export interface TahzibCategory extends BaseEntity {
+  id: string;
+  name: string;
+  description?: string;
+  order?: number;
+  createdAt?: string;
+}
+
 export interface TahzibProgram extends BaseEntity {
   id: string;
   title: string;

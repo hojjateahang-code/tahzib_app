@@ -215,6 +215,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     let localCustomGroups = await db.customGroups.toArray();
     let localPrivateNotes = await db.privateNotes.toArray();
     let localTahzibPrograms = await db.tahzibPrograms.toArray();
+    let localTahzibCategories = await db.tahzibCategories.toArray();
 
     // 4. MERGE: Apply Granular Deep Merge across local + all remote datasets
     for (const remoteData of remoteDatasets) {
@@ -248,6 +249,9 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
       if (Array.isArray(remoteData.tahzibPrograms)) {
         localTahzibPrograms = mergeEntityArrays(localTahzibPrograms, remoteData.tahzibPrograms);
       }
+      if (Array.isArray(remoteData.tahzibCategories)) {
+        localTahzibCategories = mergeEntityArrays(localTahzibCategories, remoteData.tahzibCategories);
+      }
     }
 
     // Save merged state back into local Dexie database
@@ -261,6 +265,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     if (localCustomGroups.length > 0) await db.customGroups.bulkPut(localCustomGroups);
     if (localPrivateNotes.length > 0) await db.privateNotes.bulkPut(localPrivateNotes);
     if (localTahzibPrograms.length > 0) await db.tahzibPrograms.bulkPut(localTahzibPrograms);
+    if (localTahzibCategories.length > 0) await db.tahzibCategories.bulkPut(localTahzibCategories);
 
     // 5. PUSH: Upload updated consensus dataset to Storage under client device key + latest.json
     const deviceId = getDeviceId();
@@ -282,7 +287,8 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
         messages: localMessages,
         customGroups: localCustomGroups,
         privateNotes: localPrivateNotes,
-        tahzibPrograms: localTahzibPrograms
+        tahzibPrograms: localTahzibPrograms,
+        tahzibCategories: localTahzibCategories
       }
     };
 

@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { User, Task, Assessment, PrivateNote, Report, PersonalHabit, Appointment, Message, CustomGroup, TahzibProgram } from './types';
+import type { User, Task, Assessment, PrivateNote, Report, PersonalHabit, Appointment, Message, CustomGroup, TahzibProgram, TahzibCategory } from './types';
 
 export class SeminaryDB extends Dexie {
   users!: Table<User, string>;
@@ -12,6 +12,7 @@ export class SeminaryDB extends Dexie {
   messages!: Table<Message, string>;
   customGroups!: Table<CustomGroup, string>;
   tahzibPrograms!: Table<TahzibProgram, string>;
+  tahzibCategories!: Table<TahzibCategory, string>;
 
   constructor() {
     super('SeminaryDB');
@@ -109,10 +110,31 @@ export class SeminaryDB extends Dexie {
       customGroups: 'id, ownerId, name',
       tahzibPrograms: 'id, category, isActive'
     });
+    this.version(11).stores({
+      users: 'id, role, username, nationalId, base',
+      tasks: 'id, roleTarget, assignedTo, date, isCompleted',
+      personalHabits: 'id, studentId',
+      assessments: 'id, studentId, date, synced',
+      privateNotes: 'id, studentId, date',
+      reports: 'id, authorId, studentId, type, date, synced',
+      appointments: 'id, studentId, counselorId, date, status',
+      messages: 'id, senderId, recipientId, type, date, isRead',
+      customGroups: 'id, ownerId, name',
+      tahzibPrograms: 'id, category, isActive',
+      tahzibCategories: 'id, name'
+    });
   }
 }
 
 export const db = new SeminaryDB();
+
+// Default Initial Tahzib Categories Seed
+export const DEFAULT_TAHZIB_CATEGORIES: TahzibCategory[] = [
+  { id: 'cat_ebadi', name: 'عبادی', order: 1, createdAt: new Date().toISOString() },
+  { id: 'cat_akhlaqi', name: 'اخلاقی', order: 2, createdAt: new Date().toISOString() },
+  { id: 'cat_amoozashi', name: 'آموزشی', order: 3, createdAt: new Date().toISOString() },
+  { id: 'cat_omoomi', name: 'عمومی', order: 4, createdAt: new Date().toISOString() },
+];
 
 // Default Initial Tahzib Programs Seed
 const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
@@ -223,6 +245,12 @@ export async function seedDatabase() {
           });
         }
       }
+    }
+
+    // Ensure default Tahzib categories exist in database
+    const existingCatCount = await db.tahzibCategories.count();
+    if (existingCatCount === 0) {
+      await db.tahzibCategories.bulkAdd(DEFAULT_TAHZIB_CATEGORIES);
     }
 
     // Ensure default Tahzib programs exist in database
