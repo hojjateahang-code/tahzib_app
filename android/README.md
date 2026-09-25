@@ -8,10 +8,11 @@
 
 ### ۱. فایل `.env` در برنامه اندروید چی میشه؟
 در پروژه اندروید (کاتلین)، فایل `.env` به صورت مستقیم توسط سیستم‌عامل اندروید پردازش نمی‌شود. در عوض:
-* متغیرهای محیطی مانند **آدرس سرور** (`SERVER_URL`) یا کلیدهای برنامه در فایل `android/app/build.gradle` درون بخش `defaultConfig` به صورت `buildConfigField` تعریف می‌شوند:
+* آدرس فایل‌های برنامک به صورت پیش‌فرض روی فایل‌های محلی برنامک (`file:///android_asset/public/index.html`) تنظیم شده است تا برنامه کاملاً **مستقل، آفلاین و بدون نیاز به لاگین سرور توسعه گوگل** اجرا شود:
   ```groovy
-  buildConfigField "String", "SERVER_URL", "\"https://ais-dev-ef5fjznqypc7c7a4bgzzpu-584824184963.us-west2.run.app\""
+  buildConfigField "String", "SERVER_URL", "\"file:///android_asset/public/index.html\""
   ```
+* در صورتی که خواستید برنامه را به سرور یا دامنه اختصاصی حوزه علمیه (مثلاً `https://tahzib.example.ir`) متصل کنید، کافیست آدرس سرور خود را جایگزین مقادیر فوق کنید.
 * سپس در کد کاتلین (`MainActivity.kt`) از طریق `BuildConfig.SERVER_URL` قابل دسترسی است.
 * در صورت نیاز به فایل اختصاصی کلیدها، از فایل `local.properties` در اندروید استادیو استفاده می‌شود.
 

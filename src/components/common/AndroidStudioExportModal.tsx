@@ -158,8 +158,11 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = WebViewClient()
 
-        // آدرس وب‌اپلیکیشن یا فایل index.html محلی
-        val appUrl = "https://ais-dev-ef5fjznqypc7c7a4bgzzpu-584824184963.us-west2.run.app"
+        // بارگذاری فایل‌های برنامک محلی (بدون نیاز به اینترنت یا ورود به گوگلی)
+        var appUrl = BuildConfig.SERVER_URL
+        if (appUrl.isNullOrEmpty() || appUrl.contains("run.app") || appUrl.contains("google")) {
+            appUrl = "file:///android_asset/public/index.html"
+        }
         webView.loadUrl(appUrl)
     }
 

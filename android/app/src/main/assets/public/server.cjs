@@ -25,10 +25,13 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
+var import_https = __toESM(require("https"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_vite = require("vite");
 var import_client_s3 = require("@aws-sdk/client-s3");
+var import_node_http_handler = require("@smithy/node-http-handler");
 import_dotenv.default.config();
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 var app = (0, import_express.default)();
 var PORT = 3e3;
 app.use(import_express.default.json({ limit: "50mb" }));
@@ -50,6 +53,10 @@ function getS3Client() {
   const accessKeyId = (process.env.MINIO_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
   const secretAccessKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
   const region = (process.env.MINIO_REGION || "us-east-1").trim();
+  const httpsAgent = new import_https.default.Agent({
+    rejectUnauthorized: false,
+    keepAlive: true
+  });
   return new import_client_s3.S3Client({
     endpoint,
     region,
@@ -57,7 +64,12 @@ function getS3Client() {
       accessKeyId,
       secretAccessKey
     },
-    forcePathStyle: true
+    forcePathStyle: true,
+    requestHandler: new import_node_http_handler.NodeHttpHandler({
+      httpsAgent,
+      connectionTimeout: 1e4,
+      requestTimeout: 15e3
+    })
   });
 }
 var getBucketAndPrefix = () => {
@@ -75,60 +87,167 @@ app.get("/api/time", (req, res) => {
 });
 app.get("/api/sync/status", async (req, res) => {
   try {
-    const accessKey = process.env.MINIO_ACCESS_KEY_ID;
-    const secretKey = process.env.MINIO_SECRET_ACCESS_KEY;
+    const accessKey = (process.env.MINIO_ACCESS_KEY_ID || "").trim().replace(/^["']|["']$/g, "");
+    const secretKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim().replace(/^["']|["']$/g, "");
+    const { bucket, prefix } = getBucketAndPrefix();
+    let endpoint = (process.env.MINIO_ENDPOINT || "https://gift.nodrive.ir").trim().replace(/\/+$/, "");
+    if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+      endpoint = `https://${endpoint}`;
+    }
     const isMinioConfigured = Boolean(accessKey && secretKey);
     if (isMinioConfigured) {
+      const s3 = getS3Client();
       try {
-        const s3 = getS3Client();
-        const { bucket, prefix } = getBucketAndPrefix();
-        await s3.send(new import_client_s3.HeadBucketCommand({ Bucket: bucket }));
+        await s3.send(new import_client_s3.ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }));
         return res.json({
           configured: true,
           connected: true,
           storageType: "minio",
-          message: "\u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0633\u0631\u0648\u0631 \u0645\u06CC\u0646\u06CC\u0648 (MinIO) \u0648 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0645\u062D\u0644\u06CC \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.",
-          endpoint: process.env.MINIO_ENDPOINT || "https://gift.nodrive.ir",
+          message: `\u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0633\u0631\u0648\u0631 \u0645\u06CC\u0646\u06CC\u0648 (MinIO) \u0648 \u0628\u0627\u06A9\u062A "${bucket}" \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.`,
+          endpoint,
           bucket,
           prefix
         });
-      } catch (headErr) {
+      } catch (listErr) {
+        console.warn("MinIO ListObjectsV2 check failed, trying HeadBucket/CreateBucket:", listErr.message || listErr);
+        try {
+          await s3.send(new import_client_s3.HeadBucketCommand({ Bucket: bucket }));
+          return res.json({
+            configured: true,
+            connected: true,
+            storageType: "minio",
+            message: `\u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0633\u0631\u0648\u0631 \u0645\u06CC\u0646\u06CC\u0648 (MinIO) \u0648 \u0628\u0627\u06A9\u062A "${bucket}" \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.`,
+            endpoint,
+            bucket,
+            prefix
+          });
+        } catch (headErr) {
+          try {
+            await s3.send(new import_client_s3.CreateBucketCommand({ Bucket: bucket }));
+            return res.json({
+              configured: true,
+              connected: true,
+              storageType: "minio",
+              message: `\u0628\u0627\u06A9\u062A "${bucket}" \u0628\u0631 \u0631\u0648\u06CC \u0633\u0631\u0648\u0631 MinIO \u0627\u06CC\u062C\u0627\u062F \u0634\u062F \u0648 \u0627\u062A\u0635\u0627\u0644 \u0628\u0631\u0642\u0631\u0627\u0631 \u06AF\u0631\u062F\u06CC\u062F.`,
+              endpoint,
+              bucket,
+              prefix
+            });
+          } catch (createErr) {
+            const errDetail = listErr.name || listErr.message || headErr.message || createErr.message || String(listErr);
+            console.error("MinIO connection failed completely:", errDetail);
+            return res.json({
+              configured: true,
+              connected: false,
+              storageType: "local",
+              message: `\u06A9\u0644\u06CC\u062F\u0647\u0627\u06CC MinIO \u062A\u0646\u0638\u06CC\u0645 \u0634\u062F\u0647 \u0627\u0645\u0627 \u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0628\u0627\u06A9\u062A "${bucket}" \u062F\u0631 \u0633\u0631\u0648\u0631 ${endpoint} \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F (${errDetail}). \u0644\u0637\u0641\u0627\u064B \u0635\u062D\u062A \u06A9\u0644\u06CC\u062F\u0647\u0627 \u0648 \u0646\u0627\u0645 \u0628\u0627\u06A9\u062A \u0631\u0627 \u062F\u0631 \u0641\u0627\u06CC\u0644 .env \u0628\u0631\u0631\u0633\u06CC \u0646\u0645\u0627\u06CC\u06CC\u062F.`,
+              endpoint,
+              bucket,
+              prefix,
+              error: errDetail
+            });
+          }
+        }
       }
     }
     return res.json({
       configured: true,
       connected: true,
-      storageType: "local",
-      message: "\u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0645\u062D\u0644\u06CC \u0633\u0631\u0648\u0631 (Local Disk Storage) \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.",
+      storageType: "server",
+      message: "\u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632\u06CC \u0648 \u0647\u0645\u06AF\u0627\u0645\u200C\u0633\u0627\u0632\u06CC \u062F\u0627\u062F\u0647\u200C\u0647\u0627 \u0645\u0633\u062A\u0642\u06CC\u0645\u0627\u064B \u0628\u0631 \u0631\u0648\u06CC \u062F\u06CC\u0633\u06A9 \u0633\u0631\u0648\u0631 \u0627\u0635\u0644\u06CC \u0633\u0627\u0645\u0627\u0646\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.",
       storagePath: STORAGE_PATH
     });
   } catch (error) {
     return res.json({
-      configured: true,
-      connected: true,
+      configured: false,
+      connected: false,
       storageType: "local",
-      message: "\u0627\u062A\u0635\u0627\u0644 \u0628\u0647 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0645\u062D\u0644\u06CC \u0633\u0631\u0648\u0631 \u0628\u0631\u0642\u0631\u0627\u0631 \u0627\u0633\u062A.",
+      message: `\u062E\u0637\u0627 \u062F\u0631 \u0639\u06CC\u0628\u200C\u06CC\u0627\u0628\u06CC \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632: ${error.message}`,
+      endpoint: process.env.MINIO_ENDPOINT || "https://gift.nodrive.ir",
+      bucket: (process.env.MINIO_BUCKET || "").trim(),
+      prefix: (process.env.MINIO_PREFIX || "").trim(),
       storagePath: STORAGE_PATH
     });
   }
 });
+function mergeServerDatasets(master, incoming) {
+  if (!master) master = {};
+  if (!master.data) master.data = {};
+  const inData = incoming?.data || incoming || {};
+  const entities = ["users", "tasks", "assessments", "reports", "personalHabits", "appointments", "messages", "customGroups", "privateNotes"];
+  for (const entity of entities) {
+    const existingList = Array.isArray(master.data[entity]) ? master.data[entity] : [];
+    const incomingList = Array.isArray(inData[entity]) ? inData[entity] : [];
+    if (incomingList.length > 0 || existingList.length > 0) {
+      const map = /* @__PURE__ */ new Map();
+      for (const item of existingList) {
+        if (item && item.id) map.set(item.id, { ...item });
+      }
+      for (const item of incomingList) {
+        if (!item || !item.id) continue;
+        const prev = map.get(item.id);
+        if (!prev) {
+          map.set(item.id, { ...item });
+        } else {
+          const prevTime = prev.updatedAt || 0;
+          const itemTime = item.updatedAt || 0;
+          let winning;
+          if (itemTime >= prevTime) {
+            winning = { ...prev, ...item };
+          } else {
+            winning = { ...item, ...prev };
+          }
+          if (item.isDeleted && itemTime >= prevTime) {
+            winning.isDeleted = true;
+          } else if (prev.isDeleted && prevTime >= itemTime) {
+            winning.isDeleted = true;
+          } else if (item.isDeleted || prev.isDeleted) {
+            winning.isDeleted = true;
+          }
+          map.set(item.id, winning);
+        }
+      }
+      master.data[entity] = Array.from(map.values());
+    }
+  }
+  master.app = "TahzibApp";
+  master.version = 1;
+  master.exportedAt = (/* @__PURE__ */ new Date()).toISOString();
+  return master;
+}
 app.post("/api/sync/upload", async (req, res) => {
   try {
     const { key, data } = req.body;
     const jsonString = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+    const parsedData = typeof data === "string" ? JSON.parse(data) : data;
     const relativePath = key || "backups/latest.json";
     const cleanRelPath = relativePath.replace(/^tahzibApp\//, "").replace(/^\/+/, "");
     const localFilePath = import_path.default.join(STORAGE_PATH, cleanRelPath);
     import_fs.default.mkdirSync(import_path.default.dirname(localFilePath), { recursive: true });
     import_fs.default.writeFileSync(localFilePath, jsonString, "utf-8");
-    if (!key || key === "backups/latest.json" || cleanRelPath === "backups/latest.json") {
-      const timestampPath = import_path.default.join(BACKUPS_DIR, `backup-${Date.now()}.json`);
-      import_fs.default.writeFileSync(timestampPath, jsonString, "utf-8");
+    const filename = import_path.default.basename(cleanRelPath);
+    const backupCopyPath = import_path.default.join(BACKUPS_DIR, filename);
+    if (backupCopyPath !== localFilePath) {
+      import_fs.default.writeFileSync(backupCopyPath, jsonString, "utf-8");
     }
-    if (process.env.MINIO_ACCESS_KEY_ID && process.env.MINIO_SECRET_ACCESS_KEY) {
+    const latestFilePath = import_path.default.join(BACKUPS_DIR, "latest.json");
+    let masterData = {};
+    if (import_fs.default.existsSync(latestFilePath)) {
+      try {
+        masterData = JSON.parse(import_fs.default.readFileSync(latestFilePath, "utf-8"));
+      } catch (e) {
+        masterData = {};
+      }
+    }
+    const updatedMaster = mergeServerDatasets(masterData, parsedData);
+    const updatedMasterStr = JSON.stringify(updatedMaster, null, 2);
+    import_fs.default.writeFileSync(latestFilePath, updatedMasterStr, "utf-8");
+    const accessKey = (process.env.MINIO_ACCESS_KEY_ID || "").trim();
+    const secretKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim();
+    if (accessKey && secretKey) {
       try {
         const { bucket, prefix } = getBucketAndPrefix();
-        const objectKey = key ? `${prefix}${key}` : `${prefix}backups/latest.json`;
+        const objectKey = cleanRelPath.startsWith(prefix) ? cleanRelPath : `${prefix}${cleanRelPath}`;
         const s3 = getS3Client();
         await s3.send(new import_client_s3.PutObjectCommand({
           Bucket: bucket,
@@ -136,46 +255,111 @@ app.post("/api/sync/upload", async (req, res) => {
           Body: jsonString,
           ContentType: "application/json"
         }));
+        const latestObjectKey = `${prefix}backups/latest.json`;
+        await s3.send(new import_client_s3.PutObjectCommand({
+          Bucket: bucket,
+          Key: latestObjectKey,
+          Body: updatedMasterStr,
+          ContentType: "application/json"
+        }));
+        return res.json({
+          success: true,
+          storageType: "minio",
+          message: "\u062F\u0627\u062F\u0647\u200C\u0647\u0627 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0627\u0628\u0631\u06CC MinIO \u0647\u0645\u06AF\u0627\u0645\u200C\u0633\u0627\u0632\u06CC \u0648 \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F\u0646\u062F.",
+          key: cleanRelPath,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
       } catch (minioErr) {
-        console.warn("MinIO sync mirror warning (ignored):", minioErr);
+        console.error("MinIO sync upload error:", minioErr.message || minioErr);
+        return res.json({
+          success: false,
+          storageType: "local_only",
+          message: `\u062F\u0627\u062F\u0647\u200C\u0647\u0627 \u0628\u0647 \u0635\u0648\u0631\u062A \u0645\u062D\u0644\u06CC \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F\u0646\u062F \u0627\u0645\u0627 \u0627\u0631\u0633\u0627\u0644 \u0628\u0647 \u0633\u0631\u0648\u0631 \u0627\u0628\u0631\u06CC MinIO \u0628\u0627 \u062E\u0637\u0627 \u0645\u0648\u0627\u062C\u0647 \u0634\u062F: ${minioErr.message || "\u062E\u0637\u0627\u06CC \u0627\u0631\u0633\u0627\u0644"}`,
+          key: cleanRelPath,
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
       }
     }
     return res.json({
       success: true,
-      message: "\u062F\u0627\u062F\u0647\u200C\u0647\u0627 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0633\u0631\u0648\u0631 \u0647\u0645\u06AF\u0627\u0645\u200C\u0633\u0627\u0632\u06CC \u0648 \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F\u0646\u062F.",
+      storageType: "local",
+      message: "\u062F\u0627\u062F\u0647\u200C\u0647\u0627 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632 \u0645\u062D\u0644\u06CC \u0633\u0631\u0648\u0631 \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F\u0646\u062F.",
       key: cleanRelPath,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   } catch (error) {
-    console.error("Local Sync Upload Error:", error);
+    console.error("Sync Upload Error:", error);
     return res.status(500).json({
       success: false,
-      message: `\u062E\u0637\u0627 \u062F\u0631 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632\u06CC \u0633\u0631\u0648\u0631: ${error.message}`
+      message: `\u062E\u0637\u0627 \u062F\u0631 \u0630\u062E\u06CC\u0631\u0647\u200C\u0633\u0627\u0632\u06CC: ${error.message}`
     });
   }
 });
 app.get("/api/sync/list", async (req, res) => {
   try {
     let files = [];
-    if (import_fs.default.existsSync(BACKUPS_DIR)) {
-      const filenames = import_fs.default.readdirSync(BACKUPS_DIR);
-      files = filenames.map((file) => {
-        const filePath = import_path.default.join(BACKUPS_DIR, file);
-        const stats = import_fs.default.statSync(filePath);
-        return {
-          key: `backups/${file}`,
-          fullKey: `backups/${file}`,
-          size: stats.size,
-          lastModified: stats.mtime
-        };
-      }).sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime());
+    const fileMap = /* @__PURE__ */ new Map();
+    const accessKey = (process.env.MINIO_ACCESS_KEY_ID || "").trim();
+    const secretKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim();
+    if (accessKey && secretKey) {
+      try {
+        const { bucket, prefix } = getBucketAndPrefix();
+        const s3 = getS3Client();
+        const response = await s3.send(new import_client_s3.ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix
+        }));
+        if (response.Contents && response.Contents.length > 0) {
+          for (const item of response.Contents) {
+            if (!item.Key) continue;
+            const cleanKey = item.Key.startsWith(prefix) ? item.Key.slice(prefix.length) : item.Key;
+            if (cleanKey.endsWith(".json")) {
+              fileMap.set(cleanKey, {
+                key: cleanKey,
+                fullKey: item.Key,
+                size: item.Size || 0,
+                lastModified: item.LastModified || /* @__PURE__ */ new Date()
+              });
+            }
+          }
+        }
+      } catch (minioErr) {
+        console.warn("MinIO list warning (fallback to local):", minioErr);
+      }
     }
+    const scanDir = (dirPath, baseRel = "") => {
+      if (!import_fs.default.existsSync(dirPath)) return;
+      const entries = import_fs.default.readdirSync(dirPath);
+      for (const entry of entries) {
+        const fullPath = import_path.default.join(dirPath, entry);
+        const stats = import_fs.default.statSync(fullPath);
+        if (stats.isDirectory()) {
+          scanDir(fullPath, import_path.default.join(baseRel, entry));
+        } else if (entry.endsWith(".json")) {
+          const relKey = import_path.default.join(baseRel, entry).replace(/\\/g, "/");
+          const cleanKey = relKey.startsWith("backups/") ? relKey : `backups/${relKey}`;
+          if (!fileMap.has(cleanKey)) {
+            fileMap.set(cleanKey, {
+              key: cleanKey,
+              fullKey: cleanKey,
+              size: stats.size,
+              lastModified: stats.mtime
+            });
+          }
+        }
+      }
+    };
+    scanDir(BACKUPS_DIR, "backups");
+    scanDir(STORAGE_PATH, "");
+    files = Array.from(fileMap.values()).sort(
+      (a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+    );
     return res.json({
       success: true,
       files
     });
   } catch (error) {
-    console.error("Local Sync List Error:", error);
+    console.error("Sync List Error:", error);
     return res.status(500).json({
       success: false,
       message: `\u062E\u0637\u0627 \u062F\u0631 \u062F\u0631\u06CC\u0627\u0641\u062A \u0644\u06CC\u0633\u062A \u0641\u0627\u06CC\u0644\u200C\u0647\u0627: ${error.message}`
@@ -186,6 +370,26 @@ app.get("/api/sync/download", async (req, res) => {
   try {
     const reqKey = req.query.key || "backups/latest.json";
     const cleanRelPath = reqKey.replace(/^tahzibApp\//, "").replace(/^\/+/, "");
+    const accessKey = (process.env.MINIO_ACCESS_KEY_ID || "").trim();
+    const secretKey = (process.env.MINIO_SECRET_ACCESS_KEY || "").trim();
+    if (accessKey && secretKey) {
+      try {
+        const { bucket, prefix } = getBucketAndPrefix();
+        const objectKey = cleanRelPath.startsWith(prefix) ? cleanRelPath : `${prefix}${cleanRelPath}`;
+        const s3 = getS3Client();
+        const response = await s3.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: objectKey }));
+        if (response.Body) {
+          const str = await response.Body.transformToString();
+          const parsedData = JSON.parse(str);
+          const localFilePath2 = import_path.default.join(STORAGE_PATH, cleanRelPath);
+          import_fs.default.mkdirSync(import_path.default.dirname(localFilePath2), { recursive: true });
+          import_fs.default.writeFileSync(localFilePath2, str, "utf-8");
+          return res.json({ success: true, data: parsedData, key: cleanRelPath, source: "minio" });
+        }
+      } catch (e) {
+        console.warn("MinIO download fallback to local for key:", cleanRelPath);
+      }
+    }
     const localFilePath = import_path.default.join(STORAGE_PATH, cleanRelPath);
     if (import_fs.default.existsSync(localFilePath)) {
       const str = import_fs.default.readFileSync(localFilePath, "utf-8");
@@ -193,22 +397,9 @@ app.get("/api/sync/download", async (req, res) => {
       return res.json({
         success: true,
         data: parsedData,
-        key: cleanRelPath
+        key: cleanRelPath,
+        source: "local"
       });
-    }
-    if (process.env.MINIO_ACCESS_KEY_ID && process.env.MINIO_SECRET_ACCESS_KEY) {
-      try {
-        const { bucket, prefix } = getBucketAndPrefix();
-        const objectKey = `${prefix}${reqKey}`;
-        const s3 = getS3Client();
-        const response = await s3.send(new import_client_s3.GetObjectCommand({ Bucket: bucket, Key: objectKey }));
-        if (response.Body) {
-          const str = await response.Body.transformToString();
-          const parsedData = JSON.parse(str);
-          return res.json({ success: true, data: parsedData, key: reqKey });
-        }
-      } catch (e) {
-      }
     }
     return res.status(404).json({
       success: false,

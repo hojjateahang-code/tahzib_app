@@ -30,8 +30,12 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = WebViewClient()
 
-        // دریافت آدرس سرور از BuildConfig (معادل متغیر محیطی .env در اندروید)
-        val appUrl = BuildConfig.SERVER_URL
+        // دریافت آدرس سرور یا استفاده از فایل محلی آفلاین جهت عدم وابستگی به گوگل/سرور پیش‌فرض
+        var appUrl = BuildConfig.SERVER_URL
+        if (appUrl.isNullOrEmpty() || appUrl.contains("run.app") || appUrl.contains("google")) {
+            appUrl = "file:///android_asset/public/index.html"
+        }
+        
         webView.loadUrl(appUrl)
     }
 

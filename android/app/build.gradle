@@ -14,8 +14,8 @@ android {
         versionCode 1
         versionName "1.0.0"
 
-        // تعریف آدرس سرور و متغیرهای محیطی در BuildConfig اندروید
-        buildConfigField "String", "SERVER_URL", "\"https://ais-dev-ef5fjznqypc7c7a4bgzzpu-584824184963.us-west2.run.app\""
+        // تعریف آدرس فایل‌های محلی برنامک در نسخه APK اندروید (کاملاً مستقل و بدون نیاز به ورود به سرور پیش‌فرض گوگل)
+        buildConfigField "String", "SERVER_URL", "\"file:///android_asset/public/index.html\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
