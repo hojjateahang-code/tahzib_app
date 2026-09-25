@@ -69,10 +69,10 @@ export function MessagingCenter() {
     return map;
   }, [rawAllUsers]);
 
-  // Fetch active approved users for messaging contacts and selections
+  // Fetch all active non-deleted users for messaging contacts and selections (matching User Management list)
   const allUsers = useMemo(() => {
     if (!rawAllUsers) return [];
-    return rawAllUsers.filter(u => u.isApproved !== false && !u.isDeleted);
+    return rawAllUsers.filter(u => !u.isDeleted);
   }, [rawAllUsers]);
 
   // Auto-deselect chat contact if user gets deleted
@@ -220,10 +220,14 @@ export function MessagingCenter() {
     const query = userSearchQuery.toLowerCase().trim();
     
     return allUsers
-      .filter(u => u.id !== currentUser.id && u.isApproved !== false && !u.isDeleted)
+      .filter(u => u.id !== currentUser.id && !u.isDeleted)
       .filter(u => 
         u.name.toLowerCase().includes(query) || 
         (u.username && u.username.toLowerCase().includes(query)) ||
+        (u.firstName && u.firstName.toLowerCase().includes(query)) ||
+        (u.lastName && u.lastName.toLowerCase().includes(query)) ||
+        (u.nationalId && u.nationalId.toLowerCase().includes(query)) ||
+        (u.phone && u.phone.toLowerCase().includes(query)) ||
         (ROLE_LABELS[u.role] && ROLE_LABELS[u.role].toLowerCase().includes(query))
       )
       .map(contact => {
@@ -328,7 +332,7 @@ export function MessagingCenter() {
       }
       targetUserIds = [officialRecipientId];
     } else if (recipientType === 'BASE') {
-      const baseStudents = allUsers?.filter(u => u.role === 'STUDENT' && u.base === selectedBase) || [];
+      const baseStudents = allUsers?.filter(u => u.role === 'STUDENT' && Number(u.base) === Number(selectedBase)) || [];
       targetUserIds = baseStudents.map(u => u.id);
       if (targetUserIds.length === 0) {
         alert(`هیچ طلبی‌ای در پایه ${selectedBase} یافت نشد.`);
@@ -403,7 +407,7 @@ export function MessagingCenter() {
     let targetUserIds: string[] = [];
 
     if (bulkChatTargetType === 'BASE') {
-      const baseStudents = allUsers?.filter(u => u.role === 'STUDENT' && u.base === bulkChatBase) || [];
+      const baseStudents = allUsers?.filter(u => u.role === 'STUDENT' && Number(u.base) === Number(bulkChatBase)) || [];
       targetUserIds = baseStudents.map(u => u.id);
     } else if (bulkChatTargetType === 'GROUP') {
       const targetGroup = customGroups?.find(g => g.id === bulkChatGroupId);
