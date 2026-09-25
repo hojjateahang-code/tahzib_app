@@ -61,11 +61,29 @@ export function MessagingCenter() {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [previewAttachment, setPreviewAttachment] = useState<MessageAttachment | null>(null);
 
-  // Fetch all users
-  const allUsers = useLiveQuery(async () => {
-    const users = await db.users.toArray();
-    return users.filter(u => u.isApproved && !u.isDeleted);
-  });
+  // Fetch raw users for full lookup (including historical deleted users)
+  const rawAllUsers = useLiveQuery(() => db.users.toArray());
+  const userMap = useMemo(() => {
+    const map = new Map<string, User>();
+    rawAllUsers?.forEach(u => map.set(u.id, u));
+    return map;
+  }, [rawAllUsers]);
+
+  // Fetch active approved users for messaging contacts and selections
+  const allUsers = useMemo(() => {
+    if (!rawAllUsers) return [];
+    return rawAllUsers.filter(u => u.isApproved !== false && !u.isDeleted);
+  }, [rawAllUsers]);
+
+  // Auto-deselect chat contact if user gets deleted
+  useEffect(() => {
+    if (selectedChatUserId && allUsers) {
+      const exists = allUsers.some(u => u.id === selectedChatUserId);
+      if (!exists) {
+        setSelectedChatUserId(null);
+      }
+    }
+  }, [selectedChatUserId, allUsers]);
 
   // Fetch custom groups owned by current user or available
   const customGroups = useLiveQuery(
@@ -199,11 +217,15 @@ export function MessagingCenter() {
   // Chat contacts list with individual unread badges
   const chatContacts = useMemo(() => {
     if (!allUsers || !currentUser) return [];
-    const query = userSearchQuery.toLowerCase();
+    const query = userSearchQuery.toLowerCase().trim();
     
     return allUsers
-      .filter(u => u.id !== currentUser.id)
-      .filter(u => u.name.toLowerCase().includes(query) || (u.username && u.username.toLowerCase().includes(query)))
+      .filter(u => u.id !== currentUser.id && u.isApproved !== false && !u.isDeleted)
+      .filter(u => 
+        u.name.toLowerCase().includes(query) || 
+        (u.username && u.username.toLowerCase().includes(query)) ||
+        (ROLE_LABELS[u.role] && ROLE_LABELS[u.role].toLowerCase().includes(query))
+      )
       .map(contact => {
         const unreadCount = myMessages?.filter(m => 
           m.type === 'CHAT' && 
@@ -318,7 +340,11 @@ export function MessagingCenter() {
         alert('گروه انتخابی عضوی ندارد.');
         return;
       }
-      targetUserIds = targetGroup.memberIds;
+      targetUserIds = targetGroup.memberIds.filter(id => allUsers.some(u => u.id === id));
+      if (targetUserIds.length === 0) {
+        alert('هیچ عضو فعالی در این گروه یافت نشد.');
+        return;
+      }
     }
 
     for (const recipientId of targetUserIds) {
@@ -381,7 +407,7 @@ export function MessagingCenter() {
       targetUserIds = baseStudents.map(u => u.id);
     } else if (bulkChatTargetType === 'GROUP') {
       const targetGroup = customGroups?.find(g => g.id === bulkChatGroupId);
-      targetUserIds = targetGroup?.memberIds || [];
+      targetUserIds = (targetGroup?.memberIds || []).filter(id => allUsers.some(u => u.id === id));
     } else if (bulkChatTargetType === 'ALL_STUDENTS') {
       const students = allUsers?.filter(u => u.role === 'STUDENT') || [];
       targetUserIds = students.map(u => u.id);
@@ -389,7 +415,7 @@ export function MessagingCenter() {
       const officialUsers = allUsers?.filter(u => u.role !== 'STUDENT' && u.id !== currentUser.id) || [];
       targetUserIds = officialUsers.map(u => u.id);
     } else if (bulkChatTargetType === 'MANUAL') {
-      targetUserIds = bulkChatManualUserIds;
+      targetUserIds = bulkChatManualUserIds.filter(id => allUsers.some(u => u.id === id));
     }
 
     if (targetUserIds.length === 0) {
@@ -561,8 +587,8 @@ export function MessagingCenter() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {officialMessages.map(msg => {
-                const sender = allUsers?.find(u => u.id === msg.senderId);
-                const recipient = allUsers?.find(u => u.id === msg.recipientId);
+                const sender = userMap.get(msg.senderId);
+                const recipient = userMap.get(msg.recipientId);
                 const isSentByMe = msg.senderId === currentUser?.id;
                 const isCc = msg.ccUserIds?.includes(currentUser?.id || '');
 
@@ -583,7 +609,7 @@ export function MessagingCenter() {
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm shrink-0">
-                            {sender?.name.charAt(0) || '؟'}
+                            {sender?.name ? sender.name.charAt(0) : '؟'}
                           </div>
                         )}
 
@@ -603,11 +629,22 @@ export function MessagingCenter() {
                                 گیرنده اصلی
                               </span>
                             )}
+                            {sender?.isDeleted && (
+                              <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold border border-rose-200">
+                                کاربر حذف شده
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
-                            <span><strong>فرستنده:</strong> {sender?.name} ({ROLE_LABELS[sender?.role || 'STUDENT']})</span>
+                            <span>
+                              <strong>فرستنده:</strong> {sender ? `${sender.name} (${ROLE_LABELS[sender.role] || sender.role})` : 'کاربر سیستم'}
+                              {sender?.isDeleted ? ' (حذف شده)' : ''}
+                            </span>
                             <span>•</span>
-                            <span><strong>گیرنده:</strong> {recipient?.name} ({ROLE_LABELS[recipient?.role || 'STUDENT']})</span>
+                            <span>
+                              <strong>گیرنده:</strong> {recipient ? `${recipient.name} (${ROLE_LABELS[recipient.role] || recipient.role})` : 'کاربر سیستم'}
+                              {recipient?.isDeleted ? ' (حذف شده)' : ''}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -665,11 +702,11 @@ export function MessagingCenter() {
                       <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
                         <span className="font-bold text-amber-900">رونوشت به:</span>
                         {msg.ccUserIds.map(id => {
-                          const ccUser = allUsers?.find(u => u.id === id);
+                          const ccUser = userMap.get(id);
                           if (!ccUser) return null;
                           return (
                             <span key={id} className="bg-white px-2 py-0.5 rounded border border-amber-200 text-amber-800 text-[11px] font-medium">
-                              {ccUser.name} ({ROLE_LABELS[ccUser.role]})
+                              {ccUser.name} ({ROLE_LABELS[ccUser.role]}) {ccUser.isDeleted ? '(حذف شده)' : ''}
                             </span>
                           );
                         })}
