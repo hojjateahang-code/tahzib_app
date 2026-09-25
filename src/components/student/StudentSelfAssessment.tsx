@@ -88,6 +88,36 @@ export function StudentSelfAssessment() {
     [currentUser, selectedDate]
   );
 
+  // Tahzib Programs defined by Vice Principal
+  const allTahzibPrograms = useLiveQuery(() => db.tahzibPrograms.toArray()) || [];
+
+  const visibleTahzibPrograms = useMemo(() => {
+    if (!currentUser) return [];
+    const studentBase = currentUser.base || 1;
+
+    return allTahzibPrograms.filter(prog => {
+      if (prog.isDeleted) return false;
+      
+      const matchesBase = !prog.targetBases || prog.targetBases.length === 0 || prog.targetBases.includes(studentBase);
+      if (!matchesBase) return false;
+
+      const hasAnswerOnDate = assessment?.tahzibProgramAnswers?.[prog.id] !== undefined;
+      return prog.isActive || hasAnswerOnDate;
+    });
+  }, [allTahzibPrograms, currentUser, assessment?.tahzibProgramAnswers]);
+
+  const updateTahzibProgramAnswer = async (programId: string, value: boolean | string | number) => {
+    if (!currentUser || !assessment || isReadOnly) return;
+    const existing = assessment.tahzibProgramAnswers || {};
+    const updated = { ...existing, [programId]: value };
+
+    await db.assessments.update(assessment.id, {
+      tahzibProgramAnswers: updated,
+      synced: false
+    });
+    triggerSync();
+  };
+
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [newHabitTitle, setNewHabitTitle] = useState('');
   const [newHabitDuration, setNewHabitDuration] = useState<string>('0');
@@ -826,67 +856,147 @@ export function StudentSelfAssessment() {
           
           {expandedSection === 'standard' && (
             <div className="p-5 space-y-3">
-              {[
-                { id: 'saharKhizi', label: 'سحرخیزی و تهجد (پیش از اذان صبح)', type: 'check' },
-                { id: 'telavatNoor', label: 'تلاوت نور (استماع و همخوانی قرآن)', type: 'check' },
-                { id: 'classAttendance', label: 'حضور کامل در کلاس‌ها', type: 'select' },
-                { id: 'mabahese', label: 'حضور در مباحثه علمی', type: 'select' },
-                { id: 'earlySleep', label: 'خواب اول شب (رعایت خاموشی)', type: 'check' }
-              ].map(task => {
-                const currentVal = (assessment as any)[task.id];
-                return (
-                  <div key={task.id} className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center gap-3">
-                    <div className="flex items-center justify-between md:justify-start gap-3 md:w-5/12">
-                      <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">{task.label}:</span>
-                      {task.type === 'check' ? (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => updateField(task.id as keyof Assessment, true)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                              currentVal === true
-                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-                            }`}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>انجام شد</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateField(task.id as keyof Assessment, false)}
-                            className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                              currentVal === false
-                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30'
-                            }`}
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>انجام نشد</span>
-                          </button>
+              {visibleTahzibPrograms.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                  برنامه تهذیبی جدیدی تعریف نشده است.
+                </div>
+              ) : (
+                visibleTahzibPrograms.map(prog => {
+                  const currentAnswer = assessment.tahzibProgramAnswers?.[prog.id] !== undefined
+                    ? assessment.tahzibProgramAnswers[prog.id]
+                    : (assessment as any)[prog.id];
+
+                  return (
+                    <div key={prog.id} className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex flex-col md:flex-row md:items-center gap-3">
+                      <div className="flex flex-col gap-1 md:w-5/12">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                            {prog.title}:
+                          </span>
+                          {prog.category && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100/70 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200">
+                              {prog.category}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <select
-                          className="border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium shrink-0"
-                          value={currentVal === true ? 'FULL' : (currentVal || 'NONE')}
-                          onChange={(e) => updateField(task.id as keyof Assessment, e.target.value)}
-                        >
-                          <option value="NONE">ثبت نشده / انجام نشده</option>
-                          <option value="FULL">کامل</option>
-                          <option value="PARTIAL">ناقص</option>
-                        </select>
-                      )}
+                        {prog.description && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {prog.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Input Controls depending on inputType */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {prog.inputType === 'BOOLEAN' && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTahzibProgramAnswer(prog.id, true);
+                                if (prog.id === 'prog_sahar') updateField('saharKhizi', true);
+                                if (prog.id === 'prog_sleep') updateField('earlySleep', true);
+                              }}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                currentAnswer === true || currentAnswer === 'true'
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>انجام شد</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTahzibProgramAnswer(prog.id, false);
+                                if (prog.id === 'prog_sahar') updateField('saharKhizi', false);
+                                if (prog.id === 'prog_sleep') updateField('earlySleep', false);
+                              }}
+                              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                currentAnswer === false || currentAnswer === 'false'
+                                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                              }`}
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>انجام نشد</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {prog.inputType === 'MULTICHOICE' && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {(prog.options && prog.options.length > 0 ? prog.options : ['کامل', 'ناقص', 'انجام نشد']).map(opt => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => {
+                                  updateTahzibProgramAnswer(prog.id, opt);
+                                  if (prog.id === 'prog_class') {
+                                    updateField('classAttendance', opt === 'کامل' ? 'FULL' : opt === 'ناقص' ? 'PARTIAL' : 'NONE');
+                                  }
+                                  if (prog.id === 'prog_mabahese') {
+                                    updateField('mabahese', opt === 'کامل' ? 'FULL' : opt === 'ناقص' ? 'PARTIAL' : 'NONE');
+                                  }
+                                }}
+                                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                  currentAnswer === opt || (prog.id === 'prog_class' && ((opt === 'کامل' && currentAnswer === 'FULL') || (opt === 'ناقص' && currentAnswer === 'PARTIAL')))
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {prog.inputType === 'NUMERIC' && (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="0"
+                              value={currentAnswer !== undefined ? currentAnswer : ''}
+                              onChange={e => {
+                                const val = Number(e.target.value) || 0;
+                                updateTahzibProgramAnswer(prog.id, val);
+                                if (prog.id === 'prog_telavat') {
+                                  updateField('telavatNoor', val > 0);
+                                }
+                              }}
+                              className="w-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-center text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-100"
+                            />
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                              {prog.unit || 'عدد'}
+                            </span>
+                          </div>
+                        )}
+
+                        {prog.inputType === 'TEXT' && (
+                          <input
+                            type="text"
+                            placeholder="گزارش کوتاه..."
+                            value={typeof currentAnswer === 'string' ? currentAnswer : ''}
+                            onChange={e => updateTahzibProgramAnswer(prog.id, e.target.value)}
+                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs outline-none focus:border-blue-500 text-slate-800 dark:text-slate-100 min-w-[140px]"
+                          />
+                        )}
+                      </div>
+
+                      {/* Note for this program */}
+                      <input 
+                        type="text" 
+                        placeholder="توضیحات و یادداشت (اختیاری)"
+                        className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs outline-none focus:border-blue-500 text-slate-800 dark:text-slate-100 min-w-[120px]"
+                        value={assessment.notes?.[prog.id] || ''}
+                        onChange={(e) => updateNote(prog.id, e.target.value)}
+                      />
                     </div>
-                    <input 
-                      type="text" 
-                      placeholder={task.type === 'select' && (currentVal === 'PARTIAL' || currentVal === 'NONE') ? 'توضیحات (الزامی)' : 'توضیحات و علت (اختیاری)'}
-                      className={`flex-1 bg-white dark:bg-slate-800 border ${task.type === 'select' && (currentVal === 'PARTIAL' || currentVal === 'NONE') && !(assessment.notes?.[task.id]?.trim()) ? 'border-rose-400 focus:border-rose-500 ring-1 ring-rose-400' : 'border-slate-200 dark:border-slate-700 focus:border-blue-500'} rounded-xl p-2 text-xs outline-none text-slate-800 dark:text-slate-100`}
-                      value={assessment.notes?.[task.id] || ''}
-                      onChange={(e) => updateNote(task.id, e.target.value)}
-                    />
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           )}
         </div>

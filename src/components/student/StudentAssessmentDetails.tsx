@@ -32,6 +32,8 @@ export function StudentAssessmentDetails({ studentId }: Props) {
     [studentId]
   );
 
+  const tahzibPrograms = useLiveQuery(() => db.tahzibPrograms.toArray()) || [];
+
   if (!assessments || assessments.length === 0) {
     return (
       <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -156,14 +158,64 @@ export function StudentAssessmentDetails({ studentId }: Props) {
           )}
 
           {activeTab === 'TASKS' && (
-          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-            <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 mb-3 border-b border-slate-200 dark:border-slate-700 pb-2">
-              برنامه‌ها و سنن تهذیبی
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-4">
+            <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-700 pb-2">
+              برنامه‌ها و سنن تهذیبی ثبت‌شده
             </h5>
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 text-xs">
+              {/* Render Vice Principal defined Tahzib Programs */}
+              {tahzibPrograms.map(prog => {
+                const answer = activeAssessment.tahzibProgramAnswers?.[prog.id] !== undefined
+                  ? activeAssessment.tahzibProgramAnswers[prog.id]
+                  : (activeAssessment as any)[prog.id];
+                const note = activeAssessment.notes?.[prog.id];
+
+                let badgeBg = 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600';
+                let statusText = 'ثبت نشده';
+
+                if (answer === true || answer === 'true') {
+                  badgeBg = 'bg-emerald-600 text-white border-emerald-700 font-black shadow-xs';
+                  statusText = 'انجام شد ✓';
+                } else if (answer === false || answer === 'false') {
+                  badgeBg = 'bg-rose-600 text-white border-rose-700 font-black shadow-xs';
+                  statusText = 'انجام نشد ✖';
+                } else if (typeof answer === 'number') {
+                  badgeBg = 'bg-indigo-600 text-white border-indigo-700 font-black shadow-xs';
+                  statusText = `${answer} ${prog.unit || ''}`;
+                } else if (typeof answer === 'string' && answer.length > 0) {
+                  badgeBg = 'bg-blue-600 text-white border-blue-700 font-black shadow-xs';
+                  statusText = answer === 'FULL' ? 'کامل' : answer === 'PARTIAL' ? 'ناقص' : answer;
+                }
+
+                if (answer === undefined && !note && prog.isDeleted) return null; // Skip deleted empty programs
+
+                return (
+                  <div key={prog.id} className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 flex flex-col gap-2 shadow-2xs">
+                    <div className="flex justify-between items-center gap-1">
+                      <span className="font-extrabold text-slate-800 dark:text-slate-100 text-xs truncate">{prog.title}:</span>
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border shrink-0 ${badgeBg}`}>
+                        {statusText}
+                      </span>
+                    </div>
+                    {note && (
+                      <div className="mt-1 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-900/60 text-amber-950 dark:text-amber-200 text-[11px] flex gap-1.5 items-start">
+                        <MessageSquare className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed"><strong>توضیح طلبه:</strong> {note}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Legacy Tasks Fallback if not already in programs */}
               {Object.entries(TASK_LABELS).map(([key, label]) => {
+                const progExists = tahzibPrograms.some(p => p.id === key || (key === 'saharKhizi' && p.id === 'prog_sahar') || (key === 'telavatNoor' && p.id === 'prog_telavat') || (key === 'classAttendance' && p.id === 'prog_class') || (key === 'mabahese' && p.id === 'prog_mabahese') || (key === 'earlySleep' && p.id === 'prog_sleep'));
+                if (progExists) return null; // already rendered above
+
                 const status = (activeAssessment as any)[key];
                 const note = activeAssessment.notes?.[key];
+                if (status === undefined && !note) return null;
 
                 let badgeBg = 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600';
                 let statusText = 'ثبت نشده';
@@ -177,9 +229,6 @@ export function StudentAssessmentDetails({ studentId }: Props) {
                 } else if (status === false || status === 'NONE') {
                   badgeBg = 'bg-rose-600 text-white border-rose-700 font-black shadow-xs';
                   statusText = 'انجام نشد ✖';
-                } else if (typeof status === 'string' && status.length > 0) {
-                  badgeBg = 'bg-indigo-600 text-white border-indigo-700 font-black shadow-xs';
-                  statusText = status;
                 }
 
                 return (

@@ -51,6 +51,20 @@ export interface Task extends BaseEntity {
   }>>;
 }
 
+export interface TahzibProgram extends BaseEntity {
+  id: string;
+  title: string;
+  description?: string;
+  category?: 'عبادی' | 'اخلاقی' | 'آموزشی' | 'عمومی' | string;
+  inputType: 'BOOLEAN' | 'MULTICHOICE' | 'NUMERIC' | 'TEXT';
+  options?: string[]; // e.g. ["کامل", "ناقص", "انجام نشد"]
+  unit?: string; // e.g. 'صفحه', 'دقیقه', 'بار'
+  targetBases?: number[]; // e.g. [1, 2, 3] or [] for ALL bases
+  isActive: boolean;
+  createdAt: string;
+  createdBy?: string;
+}
+
 export interface PersonalHabit extends BaseEntity {
   id: string;
   studentId: string;
@@ -98,6 +112,9 @@ export interface Assessment extends BaseEntity {
   
   // Custom Habits completion map (habitId -> boolean or selected option string)
   customTasks?: Record<string, boolean | string>;
+
+  // Tahzib Program answers map defined by Vice Principal (programId -> boolean | string | number)
+  tahzibProgramAnswers?: Record<string, boolean | string | number>;
   
   // Screen time tracking (Digital Wellbeing)
   screenTime?: ScreenTimeData;

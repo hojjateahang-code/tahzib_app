@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { ClipboardList, Users, CheckSquare, User as UserIcon, Mail } from 'lucide-react';
+import { ClipboardList, Users, CheckSquare, User as UserIcon, Mail, Sparkles } from 'lucide-react';
 import { VicePrincipalDashboard } from './vice-principal/VicePrincipalDashboard';
 import { VicePrincipalTasks } from './vice-principal/VicePrincipalTasks';
 import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
+import { TahzibProgramsManagement } from './vice-principal/TahzibProgramsManagement';
 import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 
@@ -13,7 +14,7 @@ import { getTaskPeriodKey } from '../utils/taskUtils';
 
 export function VicePrincipalPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TASKS' | 'USERS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TASKS' | 'USERS' | 'TAHZIB_PROGRAMS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -73,6 +74,7 @@ export function VicePrincipalPanel() {
     { id: 'DASHBOARD', label: 'رصد', icon: ClipboardList },
     { id: 'TASKS', label: 'تقویم', icon: CheckSquare },
     { id: 'USERS', label: 'کاربران', icon: Users },
+    { id: 'TAHZIB_PROGRAMS', label: 'امورات تهذیبی', icon: Sparkles },
     { id: 'MESSAGES', label: 'پیام‌ها', icon: Mail },
     { id: 'PROFILE', label: 'پروفایل', icon: UserIcon }
   ] as const;
@@ -92,13 +94,13 @@ export function VicePrincipalPanel() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`relative flex flex-col sm:flex-row items-center gap-1 sm:gap-2 p-2 sm:px-5 sm:py-2.5 rounded-xl text-[10px] sm:text-sm font-bold transition-all flex-1 justify-center whitespace-nowrap ${
+                  className={`relative flex flex-col sm:flex-row items-center gap-1 sm:gap-2 p-2 sm:px-4 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all flex-1 justify-center whitespace-nowrap ${
                     isActive 
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 dark:bg-indigo-600' 
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <Icon className="w-5 h-5 sm:w-5 sm:h-5 shrink-0" />
+                  <Icon className="w-4 h-4 sm:w-4 sm:h-4 shrink-0" />
                   <span>{tab.label}</span>
                   {badge > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs">
@@ -116,6 +118,7 @@ export function VicePrincipalPanel() {
         {activeTab === 'DASHBOARD' && <VicePrincipalDashboard />}
         {activeTab === 'TASKS' && <VicePrincipalTasks />}
         {activeTab === 'USERS' && <VicePrincipalUsers />}
+        {activeTab === 'TAHZIB_PROGRAMS' && <TahzibProgramsManagement />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
         {activeTab === 'PROFILE' && <StudentProfile />}
       </div>
