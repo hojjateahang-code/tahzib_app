@@ -20,6 +20,15 @@ const ROLE_LABELS: Record<Role, string> = {
   TECH_ADMIN: 'مسئول فنی',
 };
 
+function getUserDisplayName(user?: User | null): string {
+  if (!user) return 'کاربر سیستم';
+  if (user.name && user.name.trim()) return user.name.trim();
+  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  if (fullName) return fullName;
+  if (user.username && user.username.trim()) return user.username.trim();
+  return 'کاربر';
+}
+
 export function MessagingCenter() {
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'OFFICIAL' | 'CHAT'>('OFFICIAL');
@@ -221,15 +230,26 @@ export function MessagingCenter() {
     
     return allUsers
       .filter(u => u.id !== currentUser.id && !u.isDeleted)
-      .filter(u => 
-        u.name.toLowerCase().includes(query) || 
-        (u.username && u.username.toLowerCase().includes(query)) ||
-        (u.firstName && u.firstName.toLowerCase().includes(query)) ||
-        (u.lastName && u.lastName.toLowerCase().includes(query)) ||
-        (u.nationalId && u.nationalId.toLowerCase().includes(query)) ||
-        (u.phone && u.phone.toLowerCase().includes(query)) ||
-        (ROLE_LABELS[u.role] && ROLE_LABELS[u.role].toLowerCase().includes(query))
-      )
+      .filter(u => {
+        if (!query) return true;
+        const displayName = getUserDisplayName(u).toLowerCase();
+        const username = (u.username || '').toLowerCase();
+        const firstName = (u.firstName || '').toLowerCase();
+        const lastName = (u.lastName || '').toLowerCase();
+        const nationalId = (u.nationalId || '').toLowerCase();
+        const phone = (u.phone || '').toLowerCase();
+        const roleLabel = (ROLE_LABELS[u.role] || '').toLowerCase();
+
+        return (
+          displayName.includes(query) ||
+          username.includes(query) ||
+          firstName.includes(query) ||
+          lastName.includes(query) ||
+          nationalId.includes(query) ||
+          phone.includes(query) ||
+          roleLabel.includes(query)
+        );
+      })
       .map(contact => {
         const unreadCount = myMessages?.filter(m => 
           m.type === 'CHAT' && 
@@ -613,7 +633,7 @@ export function MessagingCenter() {
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm shrink-0">
-                            {sender?.name ? sender.name.charAt(0) : '؟'}
+                            {getUserDisplayName(sender).charAt(0)}
                           </div>
                         )}
 
@@ -641,12 +661,12 @@ export function MessagingCenter() {
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
                             <span>
-                              <strong>فرستنده:</strong> {sender ? `${sender.name} (${ROLE_LABELS[sender.role] || sender.role})` : 'کاربر سیستم'}
+                              <strong>فرستنده:</strong> {sender ? `${getUserDisplayName(sender)} (${ROLE_LABELS[sender.role] || sender.role})` : 'کاربر سیستم'}
                               {sender?.isDeleted ? ' (حذف شده)' : ''}
                             </span>
                             <span>•</span>
                             <span>
-                              <strong>گیرنده:</strong> {recipient ? `${recipient.name} (${ROLE_LABELS[recipient.role] || recipient.role})` : 'کاربر سیستم'}
+                              <strong>گیرنده:</strong> {recipient ? `${getUserDisplayName(recipient)} (${ROLE_LABELS[recipient.role] || recipient.role})` : 'کاربر سیستم'}
                               {recipient?.isDeleted ? ' (حذف شده)' : ''}
                             </span>
                           </div>
@@ -770,24 +790,24 @@ export function MessagingCenter() {
                     {contact.profileImage ? (
                       <img
                         src={contact.profileImage}
-                        alt={contact.name}
+                        alt={getUserDisplayName(contact)}
                         className="w-10 h-10 rounded-full object-cover shrink-0 border border-slate-200"
                       />
                     ) : (
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 text-xs ${
                         isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
                       }`}>
-                        {contact.name.charAt(0)}
+                        {getUserDisplayName(contact).charAt(0)}
                       </div>
                     )}
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center mb-0.5">
-                        <span className="font-bold text-xs truncate">{contact.name}</span>
+                        <span className="font-bold text-xs truncate">{getUserDisplayName(contact)}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
                           isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
                         }`}>
-                          {ROLE_LABELS[contact.role]}
+                          {ROLE_LABELS[contact.role] || contact.role}
                         </span>
                       </div>
                       
@@ -839,12 +859,12 @@ export function MessagingCenter() {
                         />
                       ) : (
                         <div className="w-9 h-9 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center font-bold text-xs">
-                          {activeContact?.name.charAt(0) || '؟'}
+                          {getUserDisplayName(activeContact).charAt(0)}
                         </div>
                       )}
                       <div>
                         <h4 className="font-bold text-xs sm:text-sm text-slate-800">
-                          {activeContact?.name}
+                          {getUserDisplayName(activeContact)}
                         </h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-500">
                           {ROLE_LABELS[activeContact?.role || 'STUDENT']}
@@ -1120,8 +1140,8 @@ export function MessagingCenter() {
                             onChange={() => toggleBulkManualUser(u.id)}
                             className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                           />
-                          <span className="font-medium text-slate-800">{u.name}</span>
-                          <span className="text-[10px] text-slate-400">({ROLE_LABELS[u.role]}{u.base ? ` - پایه ${u.base}` : ''})</span>
+                          <span className="font-medium text-slate-800">{getUserDisplayName(u)}</span>
+                          <span className="text-[10px] text-slate-400">({ROLE_LABELS[u.role] || u.role}{u.base ? ` - پایه ${u.base}` : ''})</span>
                         </label>
                       ))}
                   </div>
@@ -1252,8 +1272,8 @@ export function MessagingCenter() {
                           onChange={() => toggleGroupMember(u.id)}
                           className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
                         />
-                        <span className="font-medium text-slate-800">{u.name}</span>
-                        <span className="text-[10px] text-slate-400">({ROLE_LABELS[u.role]}{u.base ? ` - پایه ${u.base}` : ''})</span>
+                        <span className="font-medium text-slate-800">{getUserDisplayName(u)}</span>
+                        <span className="text-[10px] text-slate-400">({ROLE_LABELS[u.role] || u.role}{u.base ? ` - پایه ${u.base}` : ''})</span>
                       </label>
                     ))}
                 </div>
@@ -1345,7 +1365,7 @@ export function MessagingCenter() {
                     <option value="">انتخاب کنید...</option>
                     {officialRecipientOptions.map(u => (
                       <option key={u.id} value={u.id}>
-                        {u.name} ({ROLE_LABELS[u.role]}{u.base ? ` - پایه ${u.base}` : ''})
+                        {getUserDisplayName(u)} ({ROLE_LABELS[u.role] || u.role}{u.base ? ` - پایه ${u.base}` : ''})
                       </option>
                     ))}
                   </select>
@@ -1403,7 +1423,7 @@ export function MessagingCenter() {
                           onChange={() => toggleCcUser(official.id)}
                           className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
                         />
-                        <span className="font-medium">{official.name} ({ROLE_LABELS[official.role]})</span>
+                        <span className="font-medium">{getUserDisplayName(official)} ({ROLE_LABELS[official.role] || official.role})</span>
                       </label>
                     ))}
                   </div>

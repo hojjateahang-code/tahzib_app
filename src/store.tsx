@@ -42,6 +42,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Keep currentUser synced with database changes (e.g., updates, soft deletion)
+  useEffect(() => {
+    if (users && currentUser) {
+      const dbUser = users.find(u => u.id === currentUser.id);
+      if (dbUser) {
+        if (dbUser.isDeleted) {
+          // Log out if current logged-in user was deleted
+          setCurrentUser(null);
+        } else if (
+          dbUser.name !== currentUser.name ||
+          dbUser.role !== currentUser.role ||
+          dbUser.username !== currentUser.username ||
+          dbUser.password !== currentUser.password ||
+          dbUser.profileImage !== currentUser.profileImage ||
+          dbUser.isApproved !== currentUser.isApproved ||
+          dbUser.base !== currentUser.base
+        ) {
+          // Update session if user profile changed in DB
+          setCurrentUser(dbUser);
+        }
+      }
+    }
+  }, [users, currentUser]);
+
   return (
     <AuthContext.Provider value={{ currentUser, setCurrentUser, isLoading: !users }}>
       {children}
