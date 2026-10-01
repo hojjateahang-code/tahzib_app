@@ -102,8 +102,8 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
     slice.forEach(item => {
       const st = item.screenTime!;
       const dynApps = getDynamicAppsFromLegacy(st);
-      const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a, b) => a + b, 0);
-      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a, b) => a + Number(b), 0) : 0);
+      const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a: number, b: any) => a + Number(b), 0);
+      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a: number, b: any) => a + Number(b), 0) : 0);
       
       if (totalMins > maxMins) maxMins = totalMins;
       sumMins += totalMins;
@@ -135,8 +135,8 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
     const dataList = slice.map(item => {
       const st = item.screenTime!;
       const dynApps = getDynamicAppsFromLegacy(st);
-      const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a, b) => a + b, 0);
-      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a, b) => a + Number(b), 0) : 0);
+      const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a: number, b: any) => a + Number(b), 0);
+      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a: number, b: any) => a + Number(b), 0) : 0);
       const faDate = new Date(item.date).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
 
       const pointData: Record<string, any> = {

@@ -56,7 +56,7 @@ export function getServerApiBaseUrl(): string {
   }
 
   // ۲. اولویت دوم: متغیر محیطی زمان بیلد
-  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  const envUrl = (((import.meta as any).env?.VITE_API_BASE_URL as string) || '').trim();
   if (envUrl) {
     return envUrl.replace(/\/+$/, '');
   }

@@ -6,8 +6,14 @@ import { uploadFileToMinIO, triggerSync } from '../../sync';
 import { 
   Smartphone, Clock, Image as ImageIcon, Info, Save, CheckCircle2, 
   UploadCloud, Sparkles, AlertCircle, FileText, Plus, Trash2, Moon, 
-  Search, ShieldAlert, Sun, Filter, Flame, Compass, ChevronRight, X
+  Search, ShieldAlert, Sun, Filter, Flame, Compass, ChevronRight, X,
+  Lock, RotateCw, CheckCheck, Calendar
 } from 'lucide-react';
+import DatePicker from "react-multi-date-picker";
+import persian from "react-date-object/calendars/persian";
+import persian_fa from "react-date-object/locales/persian_fa";
+import { formatJalali } from '../../utils/date';
+import { format } from 'date-fns';
 
 interface ScreenTimeTrackerProps {
   date?: string;
@@ -115,6 +121,11 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
   const [saveSuccessNotice, setSaveSuccessNotice] = useState<string | null>(null);
   const [extractNotice, setExtractNotice] = useState<string | null>(null);
 
+  // Auto-extraction and final submission lock state
+  const [isAutoExtracted, setIsAutoExtracted] = useState<boolean>(false);
+  const [extractedAt, setExtractedAt] = useState<string | null>(null);
+  const [isFinalSubmitted, setIsFinalSubmitted] = useState<boolean>(false);
+
   // Parse legacy state to dynamic
   const getDynamicAppsFromLegacy = (st: ScreenTimeData): Record<string, number> => {
     if (st.dynamicApps && Object.keys(st.dynamicApps).length > 0) {
@@ -152,6 +163,17 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
             setNightApps(st.nightApps || {});
             setScreenshotUrl(st.screenshotUrl || '');
             setNotes(st.notes || '');
+            setIsAutoExtracted(Boolean(st.autoExtracted));
+            setExtractedAt(st.extractedAt || null);
+            setIsFinalSubmitted(Boolean(st.isFinalSubmitted || st.autoExtracted));
+          } else {
+            setDynamicApps({});
+            setNightApps({});
+            setScreenshotUrl('');
+            setNotes('');
+            setIsAutoExtracted(false);
+            setExtractedAt(null);
+            setIsFinalSubmitted(false);
           }
         } else {
           setAssessment(null);
@@ -159,15 +181,80 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
           setNightApps({});
           setScreenshotUrl('');
           setNotes('');
+          setIsAutoExtracted(false);
+          setExtractedAt(null);
+          setIsFinalSubmitted(false);
         }
       });
 
     return () => { isSubscribed = false; };
   }, [currentUser?.id, selectedDate]);
 
-  // Extract usage stats automatically from Android bridge or simulate for web preview
-  const handleExtractUsageStats = () => {
+  // Core persistent save to database
+  const persistScreenTime = async (
+    appsToSave: Record<string, number>,
+    nightToSave: Record<string, number>,
+    autoExtractedFlag: boolean,
+    isoTimestamp?: string,
+    scUrl?: string,
+    noteText?: string
+  ) => {
+    if (!currentUser) return;
+
+    const totalCalculated = Object.values(appsToSave).reduce((acc: number, v: number) => acc + (Number(v) || 0), 0);
+    const totalNight = Object.values(nightToSave).reduce((acc: number, v: number) => acc + (Number(v) || 0), 0);
+
+    const screenTimeData: ScreenTimeData = {
+      totalMinutes: totalCalculated,
+      nightTotalMinutes: totalNight,
+      apps: {
+        eitaa: Number(appsToSave['ایتا']) || 0,
+        bale: Number(appsToSave['بله']) || 0,
+        telegramSocial: (Number(appsToSave['تلگرام']) || 0) + (Number(appsToSave['اینستاگرام']) || 0),
+        studyReading: (Number(appsToSave['قرآن کریم صوتی']) || 0) + (Number(appsToSave['قرآن صوتی و تفاسیر']) || 0) + (Number(appsToSave['کتب حوزوی و تقریرات']) || 0) + (Number(appsToSave['کتب حوزوی و علمی']) || 0) + (Number(appsToSave['برنامه جامع حوزه علمیه']) || 0) + (Number(appsToSave['تفسیر نور']) || 0),
+        gamesMedia: (Number(appsToSave['بازی کلش']) || 0) + (Number(appsToSave['کلش آف کلنز']) || 0) + (Number(appsToSave['بازی و سرگرمی']) || 0) + (Number(appsToSave['بازی شطرنج و فکری']) || 0),
+        other: Object.entries(appsToSave)
+          .filter(([k]) => !['ایتا', 'بله', 'تلگرام', 'اینستاگرام', 'قرآن کریم صوتی', 'قرآن صوتی و تفاسیر', 'کتب حوزوی و تقریرات', 'کتب حوزوی و علمی', 'برنامه جامع حوزه علمیه', 'تفسیر نور', 'بازی کلش', 'کلش آف کلنز', 'بازی و سرگرمی', 'بازی شطرنج و فکری'].includes(k))
+          .reduce((acc: number, [_, v]) => acc + (Number(v) || 0), 0)
+      },
+      dynamicApps: appsToSave,
+      nightApps: nightToSave,
+      autoExtracted: autoExtractedFlag,
+      isFinalSubmitted: true,
+      extractedAt: isoTimestamp || extractedAt || new Date().toISOString(),
+      screenshotUrl: scUrl !== undefined ? scUrl : screenshotUrl,
+      notes: noteText !== undefined ? noteText : notes
+    };
+
+    if (assessment) {
+      await db.assessments.update(assessment.id, {
+        screenTime: screenTimeData,
+        updatedAt: Date.now(),
+        synced: false
+      });
+      setAssessment(prev => prev ? { ...prev, screenTime: screenTimeData, updatedAt: Date.now(), synced: false } : null);
+    } else {
+      const newAssessment: Assessment = {
+        id: crypto.randomUUID(),
+        studentId: currentUser.id,
+        date: selectedDate,
+        screenTime: screenTimeData,
+        updatedAt: Date.now(),
+        synced: false
+      };
+      await db.assessments.add(newAssessment);
+      setAssessment(newAssessment);
+    }
+
+    triggerSync();
+  };
+
+  // Extract usage stats automatically from Android bridge or simulate for web preview, then immediately register as final submission
+  const handleExtractUsageStats = async () => {
     const bridge = (window as any).AndroidBridge;
+
+    let extractedAll: Record<string, number> = {};
+    let extractedNight: Record<string, number> = {};
 
     if (bridge) {
       try {
@@ -185,9 +272,6 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
             usageTimeMillis: number;
             nightUsageMillis?: number;
           }[] = JSON.parse(statsString);
-          
-          const extractedAll: Record<string, number> = {};
-          const extractedNight: Record<string, number> = {};
 
           statsList.forEach(item => {
             const totalMins = Math.round(item.usageTimeMillis / 60000);
@@ -206,23 +290,15 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
               extractedNight[friendlyName] = (extractedNight[friendlyName] || 0) + nightMins;
             }
           });
-
-          setDynamicApps(extractedAll);
-          setNightApps(extractedNight);
-
-          const totalApps = Object.keys(extractedAll).length;
-          const nightAppsCount = Object.keys(extractedNight).length;
-
-          setExtractNotice(`✅ آمار زنده گوشی استخراج شد: ${totalApps} برنامه فعال در لیست قرار گرفت (${nightAppsCount > 0 ? `${nightAppsCount} برنامه فعال بعد از ۱۰:۳۰ شب` : 'بدون فعالیت بعد از ۱۰:۳۰ شب'}).`);
-          setTimeout(() => setExtractNotice(null), 5000);
         }
       } catch (err) {
         console.error('Error fetching usage stats:', err);
         setExtractNotice('خطا در ارتباط با حسگر پایش گوشی.');
+        return;
       }
     } else {
       // Realistic simulation for web preview / Eitaa mini app displaying ALL active apps
-      const simulatedAll: Record<string, number> = {
+      extractedAll = {
         'ایتا': 110,
         'بله': 45,
         'تلگرام': 40,
@@ -237,19 +313,29 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
       };
 
       // Distinct usage after 10:30 PM (22:30)
-      const simulatedNight: Record<string, number> = {
+      extractedNight = {
         'ایتا': 35,
         'تلگرام': 20,
         'مرورگر کروم (پژوهش)': 15,
         'اینستاگرام': 15,
       };
-
-      setDynamicApps(simulatedAll);
-      setNightApps(simulatedNight);
-
-      setExtractNotice('ℹ️ در نسخه وب/پیش‌نمایش، لیست کامل ۱۱ برنامه فعال با تفکیک زمان پس از ۱۰:۳۰ شب بارگذاری شد. در گوشی آمار زنده استخراج می‌شود.');
-      setTimeout(() => setExtractNotice(null), 6000);
     }
+
+    const nowIso = new Date().toISOString();
+    setDynamicApps(extractedAll);
+    setNightApps(extractedNight);
+    setIsAutoExtracted(true);
+    setIsFinalSubmitted(true);
+    setExtractedAt(nowIso);
+
+    // Automatic final registration in DB
+    await persistScreenTime(extractedAll, extractedNight, true, nowIso);
+
+    const totalApps = Object.keys(extractedAll).length;
+    const nightAppsCount = Object.keys(extractedNight).length;
+
+    setExtractNotice(`✅ آمار زنده گوشی استخراج و ثبت نهایی در سامانه انجام شد (${totalApps} برنامه فعال، ${nightAppsCount > 0 ? `${nightAppsCount} برنامه فعال بعد از ۱۰:۳۰ شب` : 'بدون فعالیت بعد از ۱۰:۳۰ شب'}). داده‌ها جهت جلوگیری از تغییر قفل شدند.`);
+    setTimeout(() => setExtractNotice(null), 6000);
   };
 
   // Calculations
@@ -319,56 +405,20 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
     }
   };
 
-  // Save Screen Time Assessment
+  // Save Screen Time Assessment (e.g. updating notes or screenshot)
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!currentUser) return;
 
-    // We also map legacy fields to keep historical reporting working smoothly
-    const screenTimeData: ScreenTimeData = {
-      totalMinutes: Number(totalCalculatedMinutes),
-      nightTotalMinutes: Number(totalNightMinutes),
-      apps: {
-        eitaa: Number(dynamicApps['ایتا']) || 0,
-        bale: Number(dynamicApps['بله']) || 0,
-        telegramSocial: (Number(dynamicApps['تلگرام']) || 0) + (Number(dynamicApps['اینستاگرام']) || 0),
-        studyReading: (Number(dynamicApps['قرآن کریم صوتی']) || 0) + (Number(dynamicApps['قرآن صوتی و تفاسیر']) || 0) + (Number(dynamicApps['کتب حوزوی و تقریرات']) || 0) + (Number(dynamicApps['کتب حوزوی و علمی']) || 0) + (Number(dynamicApps['برنامه جامع حوزه علمیه']) || 0) + (Number(dynamicApps['تفسیر نور']) || 0),
-        gamesMedia: (Number(dynamicApps['بازی کلش']) || 0) + (Number(dynamicApps['کلش آف کلنز']) || 0) + (Number(dynamicApps['بازی و سرگرمی']) || 0) + (Number(dynamicApps['بازی شطرنج و فکری']) || 0),
-        other: Object.entries(dynamicApps)
-          .filter(([k]) => !['ایتا', 'بله', 'تلگرام', 'اینستاگرام', 'قرآن کریم صوتی', 'قرآن صوتی و تفاسیر', 'کتب حوزوی و تقریرات', 'کتب حوزوی و علمی', 'برنامه جامع حوزه علمیه', 'تفسیر نور', 'بازی کلش', 'کلش آف کلنز', 'بازی و سرگرمی', 'بازی شطرنج و فکری'].includes(k))
-          .reduce((acc: number, [_, v]) => acc + (Number(v) || 0), 0)
-      },
-      dynamicApps,
-      nightApps,
-      screenshotUrl,
-      notes
-    };
-
-    if (assessment) {
-      await db.assessments.update(assessment.id, {
-        screenTime: screenTimeData,
-        updatedAt: Date.now(),
-        synced: false
-      });
-    } else {
-      const newAssessment: Assessment = {
-        id: crypto.randomUUID(),
-        studentId: currentUser.id,
-        date: selectedDate,
-        screenTime: screenTimeData,
-        updatedAt: Date.now(),
-        synced: false
-      };
-      await db.assessments.add(newAssessment);
-    }
-
-    triggerSync();
-    setSaveSuccessNotice('اطلاعات استفاده از گوشی با موفقیت ثبت شد.');
+    await persistScreenTime(dynamicApps, nightApps, isAutoExtracted, extractedAt || undefined, screenshotUrl, notes);
+    setIsFinalSubmitted(true);
+    setSaveSuccessNotice('اطلاعات با موفقیت ثبت نهایی شد.');
     setTimeout(() => setSaveSuccessNotice(null), 3000);
   };
 
   const handleAddCustomApp = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAutoExtracted) return; // Locked: no manual additions after extraction!
     const trimmed = newAppName.trim();
     if (!trimmed) return;
 
@@ -391,6 +441,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
   };
 
   const handleRemoveApp = (appName: string) => {
+    if (isAutoExtracted) return; // Locked: no manual removals after extraction!
     setDynamicApps(prev => {
       const updated = { ...prev };
       delete updated[appName];
@@ -404,6 +455,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
   };
 
   const handleUpdateAppMins = (appName: string, value: number) => {
+    if (isAutoExtracted) return; // Locked!
     setDynamicApps(prev => ({
       ...prev,
       [appName]: value
@@ -418,6 +470,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
   };
 
   const handleUpdateNightMins = (appName: string, value: number) => {
+    if (isAutoExtracted) return; // Locked!
     const total = dynamicApps[appName] || value;
     // Cap night minutes at total minutes
     const capped = Math.min(value, total);
@@ -457,6 +510,18 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
               <span className="text-[10px] font-extrabold bg-indigo-500/30 text-indigo-200 px-2.5 py-0.5 rounded-full border border-indigo-400/30">
                 Digital Wellbeing
               </span>
+              {isFinalSubmitted && (
+                <span className="text-[10px] font-black bg-emerald-500/30 text-emerald-200 px-2.5 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1 shadow-2xs">
+                  <CheckCheck className="w-3 h-3 text-emerald-300" />
+                  ثبت نهایی شده
+                </span>
+              )}
+              {isAutoExtracted && (
+                <span className="text-[10px] font-black bg-purple-500/30 text-purple-200 px-2.5 py-0.5 rounded-full border border-purple-400/30 flex items-center gap-1 shadow-2xs">
+                  <Lock className="w-3 h-3 text-purple-300" />
+                  استخراج رسمی (قفل شده)
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-300 mt-1 leading-normal">
               ثبت تمامی برنامه‌های دارای فعالیت و تفکیک اختصاصی برنامه‌های فعال بعد از ساعت ۱۰:۳۰ شب
@@ -470,8 +535,8 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
             onClick={handleExtractUsageStats}
             className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black px-4 py-2.5 rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0 border border-emerald-400/30"
           >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>استخراج خودکار از گوشی</span>
+            {isAutoExtracted ? <RotateCw className="w-4 h-4 text-emerald-200" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
+            <span>{isAutoExtracted ? 'استخراج مجدد و به‌روزرسانی نهایی' : 'استخراج خودکار از گوشی و ثبت نهایی'}</span>
           </button>
         </div>
       </div>
@@ -627,28 +692,43 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                         <span className="text-[10px] bg-purple-900/60 text-purple-200 border border-purple-700/60 px-2 py-0.5 rounded-lg font-bold">
                           {percentOfTotal}٪ از کل استفاده
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateNightMins(appName, 0)}
-                          className="text-slate-400 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                          title="حذف از لیست شبانه"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        {!isAutoExtracted ? (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateNightMins(appName, 0)}
+                            className="text-slate-400 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="حذف از لیست شبانه"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span title="ثبت رسمی و قفل شده" className="text-purple-300 p-1">
+                            <Lock className="w-3 h-3 text-purple-300" />
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        <input 
-                          type="range" 
-                          min="5" 
-                          max={Math.max(120, totalMins)} 
-                          step="5"
-                          value={nightMins}
-                          onChange={e => handleUpdateNightMins(appName, Number(e.target.value))}
-                          className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-400"
-                        />
+                        {isAutoExtracted ? (
+                          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden flex">
+                            <div 
+                              className="bg-purple-400 h-full rounded-full transition-all"
+                              style={{ width: `${Math.min(100, Math.max(5, (nightMins / Math.max(1, totalMins)) * 100))}%` }}
+                            />
+                          </div>
+                        ) : (
+                          <input 
+                            type="range" 
+                            min="5" 
+                            max={Math.max(120, totalMins)} 
+                            step="5"
+                            value={nightMins}
+                            onChange={e => handleUpdateNightMins(appName, Number(e.target.value))}
+                            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-400"
+                          />
+                        )}
                       </div>
                       <span className="text-xs font-black text-amber-300 whitespace-nowrap min-w-[75px] text-left">
                         {formatMins(nightMins)}
@@ -694,14 +774,50 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">تاریخ:</span>
-                <input 
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => setSelectedDate(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 py-1 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"
-                />
+                <div className="flex items-center gap-1.5">
+                  <DatePicker 
+                    calendar={persian} 
+                    locale={persian_fa} 
+                    value={new Date(selectedDate)}
+                    onChange={(dateObject) => {
+                      if (dateObject) {
+                        setSelectedDate(format(dateObject.toDate(), 'yyyy-MM-dd'));
+                      }
+                    }}
+                    inputClass="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-center w-32 cursor-pointer shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(format(new Date(), 'yyyy-MM-dd'))}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      selectedDate === format(new Date(), 'yyyy-MM-dd')
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    امروز
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const yest = new Date();
+                      yest.setDate(yest.getDate() - 1);
+                      setSelectedDate(format(yest, 'yyyy-MM-dd'));
+                    }}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                      selectedDate === format(new Date(Date.now() - 86400000), 'yyyy-MM-dd')
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    دیروز
+                  </button>
+                </div>
+                <span className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-xl border border-indigo-100 dark:border-indigo-900/60 shadow-2xs">
+                  {formatJalali(selectedDate)}
+                </span>
               </div>
             </div>
 
@@ -818,25 +934,33 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                               <span>{formatMins(nightMins)} پس از ۲۲:۳۰</span>
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateNightMins(appName, Math.min(20, mins))}
-                              className="text-[10px] text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
-                              title="افزودن استفاده دیرهنگام"
-                            >
-                              <Moon className="w-2.5 h-2.5" />
-                              <span>+ پس از ۲۲:۳۰</span>
-                            </button>
+                            !isAutoExtracted ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateNightMins(appName, Math.min(20, mins))}
+                                className="text-[10px] text-slate-500 hover:text-purple-600 dark:hover:text-purple-300 bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                                title="افزودن استفاده دیرهنگام"
+                              >
+                                <Moon className="w-2.5 h-2.5" />
+                                <span>+ پس از ۲۲:۳۰</span>
+                              </button>
+                            ) : null
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveApp(appName)}
-                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0 cursor-pointer"
-                            title="حذف برنامه از لیست"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!isAutoExtracted ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveApp(appName)}
+                              className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0 cursor-pointer"
+                              title="حذف برنامه از لیست"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-500 p-1 flex items-center gap-1 text-[10px] font-bold" title="قفل استخراج خودکار (غیرقابل حذف)">
+                              <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -846,12 +970,21 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                         <div className="flex items-center gap-3">
                           <span className="text-[10px] font-bold text-slate-500 w-16 shrink-0">کل روز:</span>
                           <div className="flex-1">
-                            <input 
-                              type="range" min="0" max="480" step="5"
-                              value={mins}
-                              onChange={e => handleUpdateAppMins(appName, Number(e.target.value))}
-                              className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                            />
+                            {isAutoExtracted ? (
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex">
+                                <div 
+                                  className="bg-indigo-600 h-full rounded-full transition-all"
+                                  style={{ width: `${Math.min(100, Math.max(5, (mins / Math.max(1, totalCalculatedMinutes)) * 100))}%` }}
+                                />
+                              </div>
+                            ) : (
+                              <input 
+                                type="range" min="0" max="480" step="5"
+                                value={mins}
+                                onChange={e => handleUpdateAppMins(appName, Number(e.target.value))}
+                                className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                              />
+                            )}
                           </div>
                           <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 w-16 text-left whitespace-nowrap">
                             {formatMins(mins)}
@@ -866,12 +999,21 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                               <span>شبانه:</span>
                             </span>
                             <div className="flex-1">
-                              <input 
-                                type="range" min="0" max={Math.max(120, mins)} step="5"
-                                value={nightMins}
-                                onChange={e => handleUpdateNightMins(appName, Number(e.target.value))}
-                                className="w-full h-1 bg-purple-200 dark:bg-purple-800 rounded-lg appearance-none cursor-pointer accent-purple-600"
-                              />
+                              {isAutoExtracted ? (
+                                <div className="w-full bg-purple-200 dark:bg-purple-900/50 h-2 rounded-full overflow-hidden flex">
+                                  <div 
+                                    className="bg-purple-600 h-full rounded-full transition-all"
+                                    style={{ width: `${Math.min(100, Math.max(5, (nightMins / Math.max(1, totalNightMinutes)) * 100))}%` }}
+                                  />
+                                </div>
+                              ) : (
+                                <input 
+                                  type="range" min="0" max={Math.max(120, mins)} step="5"
+                                  value={nightMins}
+                                  onChange={e => handleUpdateNightMins(appName, Number(e.target.value))}
+                                  className="w-full h-1 bg-purple-200 dark:bg-purple-800 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                                />
+                              )}
                             </div>
                             <span className="text-[11px] font-black text-purple-800 dark:text-purple-300 w-16 text-left whitespace-nowrap">
                               {formatMins(nightMins)}
@@ -886,19 +1028,27 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
             </div>
 
             {/* Save Button */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <span className="text-[11px] text-slate-500 font-bold">
                 مجموع کل: <strong className="text-slate-800 dark:text-slate-100">{formatMins(Number(totalCalculatedMinutes))}</strong> | پس از ۲۲:۳۰: <strong className="text-purple-600 dark:text-purple-300">{formatMins(Number(totalNightMinutes))}</strong>
               </span>
 
-              <button
-                type="button"
-                onClick={() => handleSave()}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>ثبت آمار نهایی</span>
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {isFinalSubmitted && (
+                  <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shadow-2xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    ثبت نهایی شده
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleSave()}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isFinalSubmitted ? 'به‌روزرسانی و ثبت مجدد' : 'ثبت آمار نهایی'}</span>
+                </button>
+              </div>
             </div>
 
           </div>
@@ -907,77 +1057,119 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
         {/* Right Column: Manual App Addition, Digital Wellbeing Screenshot, Notes */}
         <div className="lg:col-span-4 flex flex-col gap-4">
           
-          {/* Quick Manual Add Form */}
-          <form onSubmit={handleAddCustomApp} className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
-            <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <Plus className="w-4 h-4 text-emerald-500" />
-              <span>افزودن دستی برنامه دلخواه</span>
-            </h5>
-            <p className="text-[10px] text-slate-500">
-              هر برنامه‌ای که استفاده کرده‌اید (آموزشی، پیام‌رسان، بازی و...) را می‌توانید وارد کنید.
-            </p>
-
-            <div className="space-y-2.5">
-              <input 
-                type="text"
-                placeholder="نام برنامه (مثال: شاد، درس صوتی، اسنپ)..."
-                value={newAppName}
-                onChange={e => setNewAppName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
-              />
-
-              <div className="flex gap-2 items-center">
-                <input 
-                  type="number" min="5" max="480" step="5"
-                  value={newAppMins}
-                  onChange={e => setNewAppMins(Number(e.target.value))}
-                  className="w-20 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-slate-100 text-center"
-                />
-                <span className="text-[11px] text-slate-500 font-bold">دقیقه کل مصرف</span>
+          {/* Quick Manual Add Form or Locked Official Card */}
+          {isAutoExtracted ? (
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-indigo-200/80 dark:border-indigo-900/60 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>استخراج رسمی و ثبت نهایی</span>
+                </h5>
+                <span className="text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                  <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  ثبت نهایی
+                </span>
               </div>
 
-              {/* Night usage checkbox for this new app */}
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 dark:text-slate-300">
-                  <input 
-                    type="checkbox"
-                    checked={hasNightUsage}
-                    onChange={e => {
-                      setHasNightUsage(e.target.checked);
-                      if (e.target.checked && newAppNightMins === 0) {
-                        setNewAppNightMins(Math.min(15, newAppMins));
-                      }
-                    }}
-                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300"
-                  />
-                  <span className="flex items-center gap-1">
-                    <Moon className="w-3 h-3 text-purple-500" />
-                    <span>فعالیت بعد از ساعت ۱۰:۳۰ شب</span>
+              <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/50 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-1.5">
+                <p className="text-[11px] text-indigo-950 dark:text-indigo-200 font-bold leading-normal">
+                  اطلاعات پایش گوشی مستقیماً از حسگر تلفن همراه استخراج شده است.
+                </p>
+                <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  به جهت حفظ امانت و اعتبار گزارش، اقلام استخراج‌شده قفل شده و امکان افزودن یا حذف دستی برنامه‌ها غیرفعال است.
+                </p>
+              </div>
+
+              {extractedAt && (
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <span>زمان استخراج و ثبت نهایی:</span>
+                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200" dir="ltr">
+                    {new Date(extractedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                </label>
-
-                {hasNightUsage && (
-                  <div className="flex items-center gap-2 pr-6">
-                    <input 
-                      type="number" min="5" max={newAppMins} step="5"
-                      value={newAppNightMins}
-                      onChange={e => setNewAppNightMins(Number(e.target.value))}
-                      className="w-20 px-2 py-1 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-xs font-bold text-center text-purple-700 dark:text-purple-300"
-                    />
-                    <span className="text-[10px] text-purple-700 dark:text-purple-300 font-bold">دقیقه بعد از ۲۲:۳۰</span>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                type="button"
+                onClick={handleExtractUsageStats}
+                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>افزودن برنامه به لیست</span>
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>استخراج مجدد و به‌روزرسانی زنده</span>
               </button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleAddCustomApp} className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+              <h5 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-emerald-500" />
+                <span>افزودن دستی برنامه دلخواه</span>
+              </h5>
+              <p className="text-[10px] text-slate-500">
+                هر برنامه‌ای که استفاده کرده‌اید (آموزشی، پیام‌رسان، بازی و...) را می‌توانید وارد کنید.
+              </p>
+
+              <div className="space-y-2.5">
+                <input 
+                  type="text"
+                  placeholder="نام برنامه (مثال: شاد، درس صوتی، اسنپ)..."
+                  value={newAppName}
+                  onChange={e => setNewAppName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
+                />
+
+                <div className="flex gap-2 items-center">
+                  <input 
+                    type="number" min="5" max="480" step="5"
+                    value={newAppMins}
+                    onChange={e => setNewAppMins(Number(e.target.value))}
+                    className="w-20 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-slate-100 text-center"
+                  />
+                  <span className="text-[11px] text-slate-500 font-bold">دقیقه کل مصرف</span>
+                </div>
+
+                {/* Night usage checkbox for this new app */}
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <input 
+                      type="checkbox"
+                      checked={hasNightUsage}
+                      onChange={e => {
+                        setHasNightUsage(e.target.checked);
+                        if (e.target.checked && newAppNightMins === 0) {
+                          setNewAppNightMins(Math.min(15, newAppMins));
+                        }
+                      }}
+                      className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300"
+                    />
+                    <span className="flex items-center gap-1">
+                      <Moon className="w-3 h-3 text-purple-500" />
+                      <span>فعالیت بعد از ساعت ۱۰:۳۰ شب</span>
+                    </span>
+                  </label>
+
+                  {hasNightUsage && (
+                    <div className="flex items-center gap-2 pr-6">
+                      <input 
+                        type="number" min="5" max={newAppMins} step="5"
+                        value={newAppNightMins}
+                        onChange={e => setNewAppNightMins(Number(e.target.value))}
+                        className="w-20 px-2 py-1 bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-xs font-bold text-center text-purple-700 dark:text-purple-300"
+                      />
+                      <span className="text-[10px] text-purple-700 dark:text-purple-300 font-bold">دقیقه بعد از ۲۲:۳۰</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>افزودن برنامه به لیست</span>
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Screenshot Upload Block */}
           <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2.5">

@@ -98,6 +98,9 @@ export interface ScreenTimeData {
   };
   dynamicApps?: Record<string, number>; // Map of dynamic app names to usage minutes
   nightApps?: Record<string, number>; // Map of app names to usage minutes after 10:30 PM
+  autoExtracted?: boolean; // True if extracted automatically from phone
+  extractedAt?: string; // ISO timestamp of extraction
+  isFinalSubmitted?: boolean; // True if final registration/submission is completed
   screenshotUrl?: string;
   notes?: string;
 }

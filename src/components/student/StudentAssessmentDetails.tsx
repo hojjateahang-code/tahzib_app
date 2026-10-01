@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { Calendar, FileText, CheckCircle2, XCircle, AlertCircle, MessageSquare } from 'lucide-react';
+import { Calendar, FileText, CheckCircle2, XCircle, AlertCircle, MessageSquare, Smartphone, Moon, Clock, Lock, CheckCheck } from 'lucide-react';
 
 interface Props {
   studentId: string;
@@ -25,7 +25,7 @@ const TASK_LABELS: Record<string, string> = {
 
 export function StudentAssessmentDetails({ studentId }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'PRAYERS' | 'TASKS' | 'NOTES'>('PRAYERS');
+  const [activeTab, setActiveTab] = useState<'PRAYERS' | 'TASKS' | 'NOTES' | 'SCREENTIME'>('PRAYERS');
 
   const assessments = useLiveQuery(
     () => db.assessments.where('studentId').equals(studentId).reverse().sortBy('date'),
@@ -106,6 +106,19 @@ export function StudentAssessmentDetails({ studentId }: Props) {
             >
               توضیحات کلی
             </button>
+            {activeAssessment.screenTime && (
+              <button
+                onClick={() => setActiveTab('SCREENTIME')}
+                className={`whitespace-nowrap px-4 py-2 text-[11px] sm:text-xs font-extrabold rounded-xl transition-all flex items-center justify-center gap-1.5 flex-1 sm:flex-initial cursor-pointer ${
+                  activeTab === 'SCREENTIME'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white/40 dark:hover:bg-slate-900/40'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>پایش استفاده از گوشی</span>
+              </button>
+            )}
           </div>
 
           {activeTab === 'PRAYERS' && (
@@ -264,6 +277,84 @@ export function StudentAssessmentDetails({ studentId }: Props) {
                 </p>
               ) : (
                 <p className="text-slate-500">یادداشتی ثبت نشده است.</p>
+              )}
+            </div>
+          )}
+
+          {/* Screen Time Wellbeing Section */}
+          {activeTab === 'SCREENTIME' && activeAssessment.screenTime && (
+            <div className="space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-slate-800 dark:text-slate-100">
+                      پایش زمان استفاده از گوشی طلبه
+                    </h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      کل مصرف: <strong>{Math.floor(activeAssessment.screenTime.totalMinutes / 60)}س و {activeAssessment.screenTime.totalMinutes % 60}د</strong> | بعد از ۲۲:۳۰: <strong className="text-purple-600 dark:text-purple-300">{Math.floor((activeAssessment.screenTime.nightTotalMinutes || 0) / 60)}س و {(activeAssessment.screenTime.nightTotalMinutes || 0) % 60}د</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {activeAssessment.screenTime.autoExtracted ? (
+                    <span className="text-[10px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                      <Lock className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                      استخراج رسمی از گوشی (قفل شده)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl">
+                      ثبت خوداظهاری دستی
+                    </span>
+                  )}
+                  {activeAssessment.screenTime.isFinalSubmitted && (
+                    <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-xl flex items-center gap-1">
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ثبت نهایی
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Active Apps Breakdown */}
+              {activeAssessment.screenTime.dynamicApps && Object.keys(activeAssessment.screenTime.dynamicApps).length > 0 && (
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+                  <h6 className="text-xs font-black text-slate-700 dark:text-slate-200 mb-2">برنامه‌های دارای فعالیت:</h6>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {Object.entries(activeAssessment.screenTime.dynamicApps).map(([appName, mins]) => {
+                      const nightM = activeAssessment.screenTime?.nightApps?.[appName] || 0;
+                      return (
+                        <div key={appName} className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{appName}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-slate-600 dark:text-slate-400">{mins} دقیقه</span>
+                            {nightM > 0 && (
+                              <span className="text-[10px] bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded-md font-bold">
+                                {nightM}د در شب
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Screenshot or Notes if any */}
+              {activeAssessment.screenTime.notes && (
+                <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 text-xs text-amber-950 dark:text-amber-200">
+                  <strong>عذر/توضیح طلبه:</strong> {activeAssessment.screenTime.notes}
+                </div>
+              )}
+              {activeAssessment.screenTime.screenshotUrl && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-bold block mb-2 text-slate-700 dark:text-slate-300">تصویر اسکرین‌شات ضمیمه شده:</span>
+                  <img src={activeAssessment.screenTime.screenshotUrl} alt="Wellbeing screenshot" className="max-w-xs rounded-xl border border-slate-300 dark:border-slate-600 shadow-sm" />
+                </div>
               )}
             </div>
           )}
