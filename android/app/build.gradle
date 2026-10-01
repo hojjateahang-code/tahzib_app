@@ -14,8 +14,8 @@ android {
         versionCode 1
         versionName "1.0.0"
 
-        // تعریف آدرس فایل‌های محلی برنامک در نسخه APK اندروید (کاملاً مستقل و بدون نیاز به ورود به سرور پیش‌فرض گوگل)
-        buildConfigField "String", "SERVER_URL", "\"file:///android_asset/public/index.html\""
+        // تعریف آدرس فایل‌های محلی برنامک در نسخه APK اندروید (کاملاً مستقل و تحت پروتکل امن appassets)
+        buildConfigField "String", "SERVER_URL", "\"https://appassets.androidplatform.net/index.html\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
