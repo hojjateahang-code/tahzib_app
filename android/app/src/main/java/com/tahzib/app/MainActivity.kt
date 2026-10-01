@@ -7,14 +7,13 @@ import android.os.Bundle
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewAssetLoader
-import androidx.webkit.WebViewClientCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -72,25 +71,17 @@ class MainActivity : AppCompatActivity() {
             .addPathHandler("/", PublicAssetPathHandler(this))
             .build()
 
-        webView.webViewClient = object : WebViewClientCompat() {
+        webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest
+                view: WebView?,
+                request: WebResourceRequest?
             ): WebResourceResponse? {
-                val intercepted = assetLoader.shouldInterceptRequest(request.url)
+                val url = request?.url ?: return null
+                val intercepted = assetLoader.shouldInterceptRequest(url)
                 if (intercepted != null) {
                     return intercepted
                 }
                 return super.shouldInterceptRequest(view, request)
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError
-            ) {
-                super.onReceivedError(view, request, error)
-                Log.e("TahzibAppWebView", "Error loading ${request.url}: ${error.description} (code: ${error.errorCode})")
             }
         }
 
