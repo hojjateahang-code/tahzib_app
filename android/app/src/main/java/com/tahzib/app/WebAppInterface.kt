@@ -42,4 +42,12 @@ class WebAppInterface(private val mContext: Context) {
 
         return jsonArray.toString()
     }
+
+    /**
+     * ۴. دریافت آدرس پیش‌فرض سرور اصلی اینترنتی سامانه جهت اتصال APIها
+     */
+    @JavascriptInterface
+    fun getServerUrl(): String {
+        return BuildConfig.REMOTE_SERVER_URL
+    }
 }

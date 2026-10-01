@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Download, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, AppWindow, Smartphone } from 'lucide-react';
+import { getApiUrl } from '../../lib/apiConfig';
 
 export const CURRENT_VERSION = "1.0.0"; // The current hardcoded version of the running client code
 
@@ -24,7 +25,7 @@ export function LiveUpdateChecker() {
 
   const checkUpdates = async () => {
     try {
-      const res = await fetch(`/api/update/check?currentVersion=${CURRENT_VERSION}`);
+      const res = await fetch(getApiUrl(`/api/update/check?currentVersion=${CURRENT_VERSION}`));
       if (res.ok) {
         const data: UpdateCheckResponse = await res.json();
         if (data.success && data.updateAvailable) {
@@ -73,7 +74,7 @@ export function LiveUpdateChecker() {
       } else {
         // Download the Android APK from MinIO proxy URL
         const link = document.createElement('a');
-        link.href = updateInfo.apkUrl;
+        link.href = updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getApiUrl(updateInfo.apkUrl);
         link.download = `TahzibApp-v${updateInfo.latestVersion}.apk`;
         document.body.appendChild(link);
         link.click();

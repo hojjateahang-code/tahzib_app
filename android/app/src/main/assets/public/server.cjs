@@ -34,6 +34,15 @@ import_dotenv.default.config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 var app = (0, import_express.default)();
 var PORT = 3e3;
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(import_express.default.json({ limit: "50mb" }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "50mb" }));
 var STORAGE_PATH = process.env.STORAGE_PATH || import_path.default.join(process.cwd(), "storage");

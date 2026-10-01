@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Upload, RefreshCw, CheckCircle2, AlertCircle, AppWindow, Smartphone, FileCode, CheckSquare } from 'lucide-react';
 import { CURRENT_VERSION } from '../common/LiveUpdateChecker';
+import { getApiUrl } from '../../lib/apiConfig';
 
 interface PublishedConfig {
   version: string;
@@ -27,7 +28,7 @@ export function TechAdminLiveUpdateManager() {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const res = await fetch('/api/update/check?currentVersion=0.0.0');
+      const res = await fetch(getApiUrl('/api/update/check?currentVersion=0.0.0'));
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -67,7 +68,7 @@ export function TechAdminLiveUpdateManager() {
     setSuccessMsg('');
 
     try {
-      const res = await fetch('/api/update/publish', {
+      const res = await fetch(getApiUrl('/api/update/publish'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

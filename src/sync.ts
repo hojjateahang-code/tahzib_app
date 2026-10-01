@@ -2,6 +2,7 @@ import { safeUUID } from './lib/crypto';
 import { db } from './db';
 import type { BaseEntity } from './types';
 import { logger } from './lib/logger';
+import { getApiUrl } from './lib/apiConfig';
 
 let syncTimeout: any = null;
 
@@ -20,7 +21,7 @@ export interface MinioStatus {
 export async function syncServerTimeOffset(): Promise<number> {
   try {
     const t1 = Date.now();
-    const res = await fetch('/api/time');
+    const res = await fetch(getApiUrl('/api/time'));
     const t2 = Date.now();
 
     if (res.ok) {
@@ -139,7 +140,7 @@ export function getDeviceId(): string {
 // Check MinIO connection status
 export async function checkMinIOStatus(): Promise<MinioStatus> {
   try {
-    const res = await fetch('/api/sync/status');
+    const res = await fetch(getApiUrl('/api/sync/status'));
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -165,7 +166,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     await syncServerTimeOffset();
 
     // 2. FETCH: List all backup files in Storage
-    const listRes = await fetch('/api/sync/list').catch(() => null);
+    const listRes = await fetch(getApiUrl('/api/sync/list')).catch(() => null);
     const backupFiles: { key: string }[] = [];
 
     if (listRes && listRes.ok) {
@@ -182,7 +183,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     if (backupFiles.length > 0) {
       for (const file of backupFiles) {
         try {
-          const dlRes = await fetch(`/api/sync/download?key=${encodeURIComponent(file.key)}`);
+          const dlRes = await fetch(getApiUrl(`/api/sync/download?key=${encodeURIComponent(file.key)}`));
           if (dlRes.ok) {
             const dlData = await dlRes.json();
             if (dlData.success && dlData.data?.data) {
@@ -195,7 +196,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
       }
     } else {
       // Fallback download latest.json
-      const dlRes = await fetch('/api/sync/download?key=backups/latest.json').catch(() => null);
+      const dlRes = await fetch(getApiUrl('/api/sync/download?key=backups/latest.json')).catch(() => null);
       if (dlRes && dlRes.ok) {
         const dlData = await dlRes.json();
         if (dlData.success && dlData.data?.data) {
@@ -292,7 +293,7 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
       }
     };
 
-    const pushRes = await fetch('/api/sync/upload', {
+    const pushRes = await fetch(getApiUrl('/api/sync/upload'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -349,7 +350,7 @@ export async function uploadFileToMinIO(file: File): Promise<{ success: boolean;
 
     const base64Content = await base64Promise;
 
-    const res = await fetch('/api/storage/upload', {
+    const res = await fetch(getApiUrl('/api/storage/upload'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,10 +1,13 @@
 import React, { useState } from "react";
 import { testMinIOConnection, type MinIOHealthStatus } from "../lib/cloudSync";
+import { getServerApiBaseUrl, setStoredServerUrl } from "../lib/apiConfig";
 
 export function MinioConnectionDebugWidget() {
   const [showPanel, setShowPanel] = useState(false);
   const [testing, setTesting] = useState(false);
   const [healthResult, setHealthResult] = useState<MinIOHealthStatus | null>(null);
+  const [serverUrlInput, setServerUrlInput] = useState(getServerApiBaseUrl());
+  const [isSaved, setIsSaved] = useState(false);
 
   const handleRunDiagnostics = async () => {
     setTesting(true);
@@ -12,6 +15,20 @@ export function MinioConnectionDebugWidget() {
     const result = await testMinIOConnection();
     setHealthResult(result);
     setTesting(false);
+  };
+
+  const handleSaveServerUrl = async () => {
+    setStoredServerUrl(serverUrlInput);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2500);
+    handleRunDiagnostics();
+  };
+
+  const handleResetServerUrl = () => {
+    setStoredServerUrl('');
+    const defaultUrl = getServerApiBaseUrl();
+    setServerUrlInput(defaultUrl);
+    handleRunDiagnostics();
   };
 
   const getEitaaEnvInfo = () => {
@@ -82,10 +99,46 @@ export function MinioConnectionDebugWidget() {
             </div>
           )}
 
+          {/* تنظیم و نمایش آدرس سرور اصلی سامانه */}
+          <div className="space-y-1.5 pt-2 border-t border-slate-800 text-slate-300 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-indigo-400 font-bold">آدرس سرور اینترنتی پایگاه داده (API URL):</span>
+              {isSaved && <span className="text-[10px] text-emerald-400 font-bold animate-pulse">✓ ذخیره شد</span>}
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                dir="ltr"
+                value={serverUrlInput}
+                onChange={(e) => setServerUrlInput(e.target.value)}
+                placeholder="https://your-server.ir"
+                className="flex-1 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-emerald-300 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleSaveServerUrl}
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold cursor-pointer transition shadow-sm"
+              >
+                ذخیره
+              </button>
+              <button
+                type="button"
+                onClick={handleResetServerUrl}
+                title="بازنشانی به پیش‌فرض"
+                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer transition"
+              >
+                پیش‌فرض
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              در نسخه نصبی اندروید (APK)، تمامی درخواست‌های اتصال به دیتابیس و همگام‌سازی ابری به این آدرس ارسال می‌شوند.
+            </p>
+          </div>
+
           {/* اطلاعات محیطی ایتا و URL */}
           <div className="space-y-2 pt-2 border-t border-slate-800 text-slate-300 text-[11px]">
             <div>
-              <span className="text-indigo-400 font-bold block mb-1">آدرس فعلی (URL):</span>
+              <span className="text-indigo-400 font-bold block mb-1">آدرس فعلی وب‌ویو (WebView URL):</span>
               <div className="bg-slate-950 p-2 rounded-lg text-[10px] break-all text-emerald-400 font-mono dir-ltr text-left">
                 {env.url}
               </div>

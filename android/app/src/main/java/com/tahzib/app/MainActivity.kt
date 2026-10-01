@@ -137,6 +137,12 @@ class MainActivity : AppCompatActivity() {
                 val inputStream = context.assets.open(cleanPath)
                 WebResourceResponse(mimeType, "UTF-8", inputStream)
             } catch (e: Exception) {
+                // اگر درخواست مربوط به API سرور باشد، به هیچ وجه index.html برنگردان
+                if (cleanPath.startsWith("public/api/") || cleanPath.contains("/api/")) {
+                    val jsonError = "{\"success\":false,\"connected\":false,\"message\":\"API endpoint is hosted on remote server, not local appassets.\"}"
+                    return WebResourceResponse("application/json", "UTF-8", jsonError.byteInputStream())
+                }
+
                 if (!cleanPath.contains('.')) {
                     try {
                         val inputStream = context.assets.open("public/index.html")
