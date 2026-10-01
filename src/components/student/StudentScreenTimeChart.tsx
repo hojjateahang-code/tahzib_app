@@ -14,7 +14,7 @@ import {
   Tooltip, 
   Legend 
 } from 'recharts';
-import { Smartphone, Clock, Calendar, TrendingUp, Sparkles, AlertCircle, BookOpen, MessageCircle, Gamepad2, Layers } from 'lucide-react';
+import { Smartphone, Clock, Calendar, TrendingUp, Sparkles, AlertCircle, BookOpen, MessageCircle, Gamepad2, Layers, Moon } from 'lucide-react';
 
 interface StudentScreenTimeChartProps {
   studentId?: string;
@@ -97,14 +97,17 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
     const appTotals: Record<string, number> = {};
     let sumMins = 0;
     let maxMins = 0;
+    let sumNightMins = 0;
 
     slice.forEach(item => {
       const st = item.screenTime!;
       const dynApps = getDynamicAppsFromLegacy(st);
       const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a, b) => a + b, 0);
+      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a, b) => a + Number(b), 0) : 0);
       
       if (totalMins > maxMins) maxMins = totalMins;
       sumMins += totalMins;
+      sumNightMins += nightMins;
 
       Object.entries(dynApps).forEach(([appName, mins]) => {
         if (mins > 0) {
@@ -133,15 +136,18 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
       const st = item.screenTime!;
       const dynApps = getDynamicAppsFromLegacy(st);
       const totalMins = st.totalMinutes || Object.values(dynApps).reduce((a, b) => a + b, 0);
+      const nightMins = st.nightTotalMinutes || (st.nightApps ? Object.values(st.nightApps).reduce((a, b) => a + Number(b), 0) : 0);
       const faDate = new Date(item.date).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
 
       const pointData: Record<string, any> = {
         date: item.date,
         name: faDate,
         totalMinutes: totalMins,
+        nightTotalMinutes: nightMins,
         totalHours: Number((totalMins / 60).toFixed(1)),
         notes: st.notes,
-        dynApps // Pass along raw dynamic apps for custom tooltip rendering
+        dynApps, // Pass along raw dynamic apps for custom tooltip rendering
+        nightApps: st.nightApps || {}
       };
 
       // Populate app-specific minutes for stacked chart
@@ -153,11 +159,13 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
     });
 
     const avgMins = slice.length > 0 ? Math.round(sumMins / slice.length) : 0;
+    const avgNightMins = slice.length > 0 ? Math.round(sumNightMins / slice.length) : 0;
 
     return {
       chartData: dataList,
       stats: {
         avgMins,
+        avgNightMins,
         maxMins,
         totalDays: slice.length,
         topAppName
@@ -182,6 +190,17 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
             <span>{label}</span>
             <span className="text-indigo-600 dark:text-indigo-400 font-black">{formatMinsToHours(data.totalMinutes)}</span>
           </div>
+
+          {/* Night usage badge in tooltip */}
+          {data.nightTotalMinutes > 0 && (
+            <div className="flex justify-between items-center p-1.5 bg-purple-50 dark:bg-purple-950/50 rounded-lg border border-purple-200 dark:border-purple-800/60 text-purple-800 dark:text-purple-300 font-extrabold text-[10px]">
+              <span className="flex items-center gap-1">
+                <Moon className="w-3 h-3 text-amber-500 fill-amber-500" />
+                <span>بعد از ۱۰:۳۰ شب:</span>
+              </span>
+              <span>{formatMinsToHours(data.nightTotalMinutes)}</span>
+            </div>
+          )}
           <div className="space-y-1 pt-1">
             {Object.entries(dynApps).map(([appName, mins]) => {
               if (!mins || (mins as number) <= 0) return null;
@@ -225,10 +244,18 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
   return (
     <div className="space-y-4">
       {/* Top Stat Cards - Compact */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <div className="bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 p-3 rounded-2xl flex flex-col justify-between">
           <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold">میانگین روزانه</span>
           <span className="text-xs font-black text-indigo-900 dark:text-indigo-100 mt-1">{formatMinsToHours(stats.avgMins)}</span>
+        </div>
+
+        <div className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/60 p-3 rounded-2xl flex flex-col justify-between">
+          <span className="text-purple-600 dark:text-purple-300 text-[10px] font-black flex items-center gap-1">
+            <Moon className="w-3 h-3 text-amber-500 fill-amber-500" />
+            <span>پس از ۲۲:۳۰</span>
+          </span>
+          <span className="text-xs font-black text-purple-900 dark:text-purple-100 mt-1">{formatMinsToHours(stats.avgNightMins)}</span>
         </div>
 
         <div className="bg-rose-50/60 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60 p-3 rounded-2xl flex flex-col justify-between">
@@ -241,7 +268,7 @@ export function StudentScreenTimeChart({ studentId }: StudentScreenTimeChartProp
           <span className="text-xs font-black text-emerald-900 dark:text-emerald-100 mt-1">{stats.totalDays} روز</span>
         </div>
 
-        <div className="bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 p-3 rounded-2xl flex flex-col justify-between">
+        <div className="bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 p-3 rounded-2xl flex flex-col justify-between col-span-2 sm:col-span-1">
           <span className="text-slate-500 dark:text-slate-400 text-[10px] font-bold">برنامه پرمصرف</span>
           <span className="text-xs font-black text-amber-900 dark:text-amber-100 mt-1 truncate">{stats.topAppName}</span>
         </div>

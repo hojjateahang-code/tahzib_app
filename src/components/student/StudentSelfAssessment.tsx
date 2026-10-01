@@ -10,6 +10,7 @@ import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ScreenTimeTracker } from './ScreenTimeTracker';
+import { DebouncedTextInput } from '../common/DebouncedTextInput';
 
 const prayerOptions: { label: string; value: PrayerStatus }[] = [
   { label: 'انجام نشده', value: 'NONE' },
@@ -836,12 +837,13 @@ export function StudentSelfAssessment() {
                       {prayerOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                     </select>
                   </div>
-                  <input 
-                    type="text" 
+                  <DebouncedTextInput 
+                    key={`prayer_note_${selectedDate}_${prayer.id}`}
                     placeholder="توضیحات و عذر شرعی (اختیاری)"
                     className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl p-2 text-xs outline-none focus:border-emerald-500"
-                    value={assessment.notes?.[prayer.id] || ''}
-                    onChange={(e) => updateNote(prayer.id, e.target.value)}
+                    initialValue={assessment.notes?.[prayer.id] || ''}
+                    onSave={(val) => updateNote(prayer.id, val)}
+                    disabled={isReadOnly}
                   />
                 </div>
               ))}
@@ -992,23 +994,25 @@ export function StudentSelfAssessment() {
                         )}
 
                         {prog.inputType === 'TEXT' && (
-                          <input
-                            type="text"
+                          <DebouncedTextInput
+                            key={`prog_text_${selectedDate}_${prog.id}`}
                             placeholder="گزارش کوتاه..."
-                            value={typeof currentAnswer === 'string' ? currentAnswer : ''}
-                            onChange={e => updateTahzibProgramAnswer(prog.id, e.target.value)}
+                            initialValue={typeof currentAnswer === 'string' ? currentAnswer : ''}
+                            onSave={val => updateTahzibProgramAnswer(prog.id, val)}
                             className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs outline-none focus:border-blue-500 text-slate-800 dark:text-slate-100 min-w-[140px]"
+                            disabled={isReadOnly}
                           />
                         )}
                       </div>
 
                       {/* Note for this program */}
-                      <input 
-                        type="text" 
+                      <DebouncedTextInput 
+                        key={`prog_note_${selectedDate}_${prog.id}`}
                         placeholder="توضیحات و یادداشت (اختیاری)"
                         className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs outline-none focus:border-blue-500 text-slate-800 dark:text-slate-100 min-w-[120px]"
-                        value={assessment.notes?.[prog.id] || ''}
-                        onChange={(e) => updateNote(prog.id, e.target.value)}
+                        initialValue={assessment.notes?.[prog.id] || ''}
+                        onSave={(val) => updateNote(prog.id, val)}
+                        disabled={isReadOnly}
                       />
                     </div>
                   );
@@ -1205,12 +1209,13 @@ export function StudentSelfAssessment() {
                         )}
                       </div>
 
-                      <input 
-                        type="text" 
+                      <DebouncedTextInput 
+                        key={`habit_note_${selectedDate}_${habit.id}`}
                         placeholder="توضیحات (اختیاری)"
                         className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-xl p-2 text-xs outline-none focus:border-violet-500 min-w-[120px]"
-                        value={assessment.notes?.[habit.id] || ''}
-                        onChange={(e) => updateNote(habit.id, e.target.value)}
+                        initialValue={assessment.notes?.[habit.id] || ''}
+                        onSave={(val) => updateNote(habit.id, val)}
+                        disabled={isReadOnly}
                       />
                     </div>
                   );
@@ -1350,7 +1355,7 @@ export function StudentSelfAssessment() {
           
           {expandedSection === 'screentime' && (
             <div className="p-5">
-              <ScreenTimeTracker />
+              <ScreenTimeTracker date={selectedDate} />
             </div>
           )}
         </div>

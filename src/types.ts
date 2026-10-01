@@ -87,6 +87,7 @@ export interface PersonalHabit extends BaseEntity {
 
 export interface ScreenTimeData {
   totalMinutes: number; // minutes
+  nightTotalMinutes?: number; // total minutes used after 10:30 PM (22:30)
   apps?: {
     eitaa?: number;
     bale?: number;
@@ -96,6 +97,7 @@ export interface ScreenTimeData {
     other?: number;
   };
   dynamicApps?: Record<string, number>; // Map of dynamic app names to usage minutes
+  nightApps?: Record<string, number>; // Map of app names to usage minutes after 10:30 PM
   screenshotUrl?: string;
   notes?: string;
 }

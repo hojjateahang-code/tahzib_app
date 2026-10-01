@@ -34,7 +34,9 @@ class WebAppInterface(private val mContext: Context) {
         for (info in usageList) {
             val obj = JSONObject()
             obj.put("packageName", info.packageName)
+            obj.put("appName", info.appName)
             obj.put("usageTimeMillis", info.usageTimeMillis)
+            obj.put("nightUsageMillis", info.nightUsageMillis)
             jsonArray.put(obj)
         }
 

@@ -91,24 +91,63 @@ class WebAppInterface(private val mContext: Context) {
     }
 
     /**
-     * ۳. دریافت آمار استفاده از برنامه‌ها و خروجی JSON برای برنامک
+     * ۳. دریافت آمار استفاده از تمام برنامه‌های فعال و تفکیک برنامه‌های بعد از ۱۰:۳۰ شب
      */
     @JavascriptInterface
     fun getAppUsageStats(): String {
         val usageStatsManager = mContext.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val pm = mContext.packageManager
+        val now = System.currentTimeMillis()
         
-        val calendar = Calendar.getInstance()
-        val endTime = calendar.timeInMillis
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
         val startTime = calendar.timeInMillis
 
+        // آمار کل روز
         val stats = usageStatsManager.queryUsageStats(
             UsageStatsManager.INTERVAL_DAILY,
             startTime,
-            endTime
+            now
         )
+
+        // محاسبه بازه بعد از ساعت ۲۲:۳۰ (۱۰:۳۰ شب)
+        val nightCal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 22)
+            set(Calendar.MINUTE, 30)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        var nightStart = nightCal.timeInMillis
+        if (now < nightStart) {
+            nightCal.add(Calendar.DAY_OF_YEAR, -1)
+            nightStart = nightCal.timeInMillis
+        }
+
+        val nightUsageMap = mutableMapOf<String, Long>()
+        try {
+            val events = usageStatsManager.queryEvents(nightStart, now)
+            val event = android.app.usage.UsageEvents.Event()
+            val fgMap = mutableMapOf<String, Long>()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val p = event.packageName ?: continue
+                if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    fgMap[p] = event.timeStamp
+                } else if (event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                    val s = fgMap.remove(p)
+                    if (s != null && event.timeStamp >= s) {
+                        nightUsageMap[p] = (nightUsageMap[p] ?: 0L) + (event.timeStamp - s)
+                    }
+                }
+            }
+            for ((p, s) in fgMap) {
+                if (now > s) nightUsageMap[p] = (nightUsageMap[p] ?: 0L) + (now - s)
+            }
+        } catch (e: Exception) {}
 
         val jsonArray = JSONArray()
         if (stats != null) {
@@ -116,9 +155,18 @@ class WebAppInterface(private val mContext: Context) {
                 .sortedByDescending { it.totalTimeInForeground }
 
             for (stat in sortedList) {
+                val appLabel = try {
+                    val appInfo = pm.getApplicationInfo(stat.packageName, 0)
+                    pm.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    stat.packageName
+                }
+
                 val obj = JSONObject()
                 obj.put("packageName", stat.packageName)
+                obj.put("appName", appLabel)
                 obj.put("usageTimeMillis", stat.totalTimeInForeground)
+                obj.put("nightUsageMillis", nightUsageMap[stat.packageName] ?: 0L)
                 jsonArray.put(obj)
             }
         }
