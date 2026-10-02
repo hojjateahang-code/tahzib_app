@@ -2,7 +2,6 @@
 	"appId": "ir.lmsmfih.tahzib",
 	"appName": "Tahzib App",
 	"webDir": "dist",
-	"bundledWebRuntime": false,
 	"server": {
 		"androidScheme": "https",
 		"cleartext": true
