@@ -6,10 +6,12 @@ import { Message, User, Role, CustomGroup, MessageAttachment } from '../../types
 import { 
   Send, Mail, MessageSquare, User as UserIcon, Check, CheckCheck, Clock, 
   FileText, Search, PlusCircle, Paperclip, Image as ImageIcon, Film, Music, 
-  File, Users, FolderPlus, Trash2, X, AlertCircle, ArrowRight, Megaphone, Eye 
+  File, Users, FolderPlus, Trash2, X, AlertCircle, ArrowRight, Megaphone, Eye,
+  Smartphone, Download
 } from 'lucide-react';
 import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
+import { getApiUrl } from '../../lib/apiConfig';
 
 const ROLE_LABELS: Record<Role, string> = {
   DIRECTOR: 'مدیر مدرسه',
@@ -678,9 +680,33 @@ export function MessagingCenter() {
                       </div>
                     </div>
 
+                    {/* Message Content with URL Masking */}
                     <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4">
-                      {msg.content}
+                      {msg.content.replace(/http[^\s]+\/download\/tahzib\.apk/g, '«دکمه دانلود زیر»')}
                     </p>
+
+                    {/* Dedicated Secure APK Direct Download Action Button */}
+                    {(msg.subject?.includes('اندروید') || msg.content?.includes('دانلود مستقیم') || msg.content?.includes('tahzib.apk')) && (
+                      <div className="mb-4 p-4 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-500/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                          <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs shrink-0">
+                            <Smartphone className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-slate-800 dark:text-slate-100 block">اپلیکیشن رسمی اندروید سامانه تهذیب</span>
+                            <span className="text-[10px] text-slate-500">نصب امن، پرسرعت و مستقیم بدون نمایش اطلاعات سرور</span>
+                          </div>
+                        </div>
+                        <a
+                          href={getApiUrl('/download/tahzib.apk')}
+                          download="tahzib-app.apk"
+                          className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>دانلود و نصب مستقیم برنامه</span>
+                        </a>
+                      </div>
+                    )}
 
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div className="mb-4 bg-slate-100/70 p-3 rounded-xl space-y-2 border border-slate-200">
