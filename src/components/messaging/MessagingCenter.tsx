@@ -12,6 +12,7 @@ import {
 import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
 import { getApiUrl } from '../../lib/apiConfig';
+import { triggerApkDownload } from '../../lib/downloadHelper';
 
 const ROLE_LABELS: Record<Role, string> = {
   DIRECTOR: 'مدیر مدرسه',
@@ -697,14 +698,14 @@ export function MessagingCenter() {
                             <span className="text-[10px] text-slate-500">نصب امن، پرسرعت و مستقیم بدون نمایش اطلاعات سرور</span>
                           </div>
                         </div>
-                        <a
-                          href={getApiUrl('/download/tahzib.apk')}
-                          download="tahzib-app.apk"
+                        <button
+                          type="button"
+                          onClick={() => triggerApkDownload()}
                           className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
                         >
                           <Download className="w-4 h-4" />
                           <span>دانلود و نصب مستقیم برنامه</span>
-                        </a>
+                        </button>
                       </div>
                     )}
 

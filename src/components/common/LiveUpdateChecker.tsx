@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Download, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, AppWindow, Smartphone } from 'lucide-react';
+import { Sparkles, Download, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, AppWindow, Smartphone, X } from 'lucide-react';
 import { getApiUrl } from '../../lib/apiConfig';
+import { triggerApkDownload } from '../../lib/downloadHelper';
 
 export const CURRENT_VERSION = "1.0.0"; // The current hardcoded version of the running client code
 
@@ -29,6 +30,14 @@ export function LiveUpdateChecker() {
       if (res.ok) {
         const data: UpdateCheckResponse = await res.json();
         if (data.success && data.updateAvailable) {
+          const dismissedVer = localStorage.getItem('dismissed_update_version');
+          const installedVer = localStorage.getItem('installed_update_version');
+
+          // اگر کار بر قبلاً این نسخه را بسته یا بروزرسانی کرده، و بروزرسانی اجباری نیست، مجدداً نشان نده
+          if (!data.forceUpdate && (dismissedVer === data.latestVersion || installedVer === data.latestVersion)) {
+            return;
+          }
+
           setUpdateInfo(data);
           setShowModal(true);
         }
@@ -36,6 +45,13 @@ export function LiveUpdateChecker() {
     } catch (err) {
       console.warn("Live Update check skipped (offline or server starting):", err);
     }
+  };
+
+  const handleDismiss = () => {
+    if (updateInfo) {
+      localStorage.setItem('dismissed_update_version', updateInfo.latestVersion);
+    }
+    setShowModal(false);
   };
 
   useEffect(() => {
@@ -53,9 +69,12 @@ export function LiveUpdateChecker() {
     setErrorMsg('');
 
     try {
-      // If we are on Eitaa or web view, we can bust the cache and reload
+      // ذخیره نسخه دانلود شده جهت جلوگیری از تکرار نمایش مودال
+      localStorage.setItem('dismissed_update_version', updateInfo.latestVersion);
+      localStorage.setItem('installed_update_version', updateInfo.latestVersion);
+
+      // اگر ایتا یا مرورگر وب باشد
       if (!window.hasOwnProperty('AndroidBridge') && !updateInfo.apkUrl) {
-        // Clear browser cache storages to force retrieve new assets from server
         if ('caches' in window) {
           try {
             const keys = await caches.keys();
@@ -64,7 +83,6 @@ export function LiveUpdateChecker() {
             console.warn('Failed clearing client cache:', e);
           }
         }
-        // Artificial delay for elegant loader
         await new Promise(resolve => setTimeout(resolve, 1500));
         setUpdateCompleted(true);
         setIsUpdating(false);
@@ -72,19 +90,9 @@ export function LiveUpdateChecker() {
           window.location.reload();
         }, 1000);
       } else {
-        // Download the Android APK from server
+        // دانلود مطمئن فایل APK با triggerApkDownload
         const downloadEndpoint = updateInfo.apkUrl ? (updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getApiUrl(updateInfo.apkUrl)) : getApiUrl('/download/tahzib.apk');
-        const link = document.createElement('a');
-        link.href = downloadEndpoint;
-        link.download = `tahzib-app.apk`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        // Native Android Bridge notification helper if available
-        if (typeof (window as any).AndroidBridge !== 'undefined' && (window as any).AndroidBridge.showToast) {
-          (window as any).AndroidBridge.showToast('در حال دریافت نسخه جدید اندروید از مخزن مینیو...');
-        }
+        triggerApkDownload(downloadEndpoint);
 
         await new Promise(resolve => setTimeout(resolve, 2000));
         setUpdateCompleted(true);
@@ -177,7 +185,7 @@ export function LiveUpdateChecker() {
               <div className="flex gap-2">
                 {!updateInfo.forceUpdate && (
                   <button
-                    onClick={() => setShowModal(false)}
+                    onClick={handleDismiss}
                     className="flex-1 py-2.5 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                   >
                     بعداً

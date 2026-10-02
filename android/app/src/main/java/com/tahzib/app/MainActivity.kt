@@ -53,6 +53,16 @@ class MainActivity : AppCompatActivity() {
         // اضافه کردن پل ارتباطی JavascriptInterface برای اتصال وب به نیتیو اندروید
         webView.addJavascriptInterface(WebAppInterface(this), "AndroidBridge")
 
+        // تنظیم DownloadListener برای هدایت دانلود فایل‌های APK و سایر فرمت‌ها به مدیریت دانلود اندروید
+        webView.setDownloadListener { url, _, _, _, _ ->
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "DownloadListener error: ${e.message}", e)
+            }
+        }
+
         // لاگ‌گیری خطاهای جاوااسکریپت در پنجره Logcat اندروید استودیو با تگ TahzibAppWebView
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
@@ -72,6 +82,23 @@ class MainActivity : AppCompatActivity() {
             .build()
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val url = request?.url?.toString() ?: return false
+                if (url.endsWith(".apk") || url.contains("/download/tahzib.apk")) {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                        startActivity(intent)
+                        return true
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error launching APK download intent: ${e.message}")
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, request)
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView?,
                 request: WebResourceRequest?

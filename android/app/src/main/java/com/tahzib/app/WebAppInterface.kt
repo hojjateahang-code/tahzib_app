@@ -92,4 +92,32 @@ class WebAppInterface(private val mContext: Context) {
             }
         }
     }
+
+    /**
+     * ۸. دانلود مستقیم فایل APK در مرورگر یا دانلودکننده نیتیو دستگاه
+     */
+    @JavascriptInterface
+    fun downloadApkFile(url: String): Boolean {
+        return try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            mContext.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * ۹. نمایش پیام متنی شناور (Toast) در اندروید
+     */
+    @JavascriptInterface
+    fun showToast(message: String) {
+        if (mContext is MainActivity) {
+            mContext.runOnUiThread {
+                android.widget.Toast.makeText(mContext, message, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 }
