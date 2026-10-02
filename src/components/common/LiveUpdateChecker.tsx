@@ -72,10 +72,11 @@ export function LiveUpdateChecker() {
           window.location.reload();
         }, 1000);
       } else {
-        // Download the Android APK from MinIO proxy URL
+        // Download the Android APK from server
+        const downloadEndpoint = updateInfo.apkUrl ? (updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getApiUrl(updateInfo.apkUrl)) : getApiUrl('/download/tahzib.apk');
         const link = document.createElement('a');
-        link.href = updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getApiUrl(updateInfo.apkUrl);
-        link.download = `TahzibApp-v${updateInfo.latestVersion}.apk`;
+        link.href = downloadEndpoint;
+        link.download = `tahzib-app.apk`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

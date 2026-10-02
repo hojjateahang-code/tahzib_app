@@ -564,6 +564,141 @@ app.get("/api/storage/file", async (req, res) => {
 });
 
 // ==========================================
+// Direct APK Upload & Download Management Routes
+// ==========================================
+
+const APK_PATH = path.join(UPDATES_DIR, "tahzib-app.apk");
+
+// GET Route: Direct Download of Android APK
+app.get(["/download/tahzib.apk", "/api/apk/download"], (req, res) => {
+  try {
+    if (fs.existsSync(APK_PATH)) {
+      res.setHeader("Content-Disposition", 'attachment; filename="tahzib-app.apk"');
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      return res.sendFile(APK_PATH);
+    }
+
+    // Fallback: check if any .apk exists in UPDATES_DIR or dist
+    const files = fs.existsSync(UPDATES_DIR) ? fs.readdirSync(UPDATES_DIR) : [];
+    const apkFile = files.find(f => f.endsWith('.apk'));
+    if (apkFile) {
+      res.setHeader("Content-Disposition", `attachment; filename="${apkFile}"`);
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      return res.sendFile(path.join(UPDATES_DIR, apkFile));
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: "فایل APK هنوز توسط مسئول فنی در سرور بارگذاری نشده است."
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: `خطا در دانلود فایل APK: ${error.message}`
+    });
+  }
+});
+
+// GET Route: Check Latest APK Information
+app.get("/api/apk/info", (req, res) => {
+  try {
+    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
+    let info = {
+      version: "1.0.0",
+      releaseNotes: "نسخه رسمی برنامه تهذیب حوزه علمیه",
+      updatedAt: new Date().toISOString(),
+      forceUpdate: false,
+      fileSizeMb: 0,
+      hasApk: false,
+      downloadUrl: "/download/tahzib.apk"
+    };
+
+    if (fs.existsSync(updateJsonPath)) {
+      try {
+        const str = fs.readFileSync(updateJsonPath, "utf-8");
+        const parsed = JSON.parse(str);
+        info = { ...info, ...parsed };
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (fs.existsSync(APK_PATH)) {
+      const stats = fs.statSync(APK_PATH);
+      info.fileSizeMb = Number((stats.size / (1024 * 1024)).toFixed(2));
+      info.hasApk = true;
+      info.updatedAt = stats.mtime.toISOString();
+    }
+
+    return res.json({
+      success: true,
+      ...info
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST Route: Upload APK directly from Tech Admin Panel
+app.post("/api/apk/upload", async (req, res) => {
+  try {
+    const { name, content, version, releaseNotes, forceUpdate } = req.body;
+    if (!content) {
+      return res.status(400).json({ success: false, message: "محتوای فایل APK ارسال نشده است." });
+    }
+
+    let buffer: Buffer;
+    if (content.startsWith("data:")) {
+      const parts = content.split(";base64,");
+      buffer = Buffer.from(parts[1], "base64");
+    } else {
+      buffer = Buffer.from(content, "base64");
+    }
+
+    // Ensure updates dir exists
+    if (!fs.existsSync(UPDATES_DIR)) {
+      fs.mkdirSync(UPDATES_DIR, { recursive: true });
+    }
+
+    // Save as primary APK
+    fs.writeFileSync(APK_PATH, buffer);
+
+    const fileSizeMb = Number((buffer.length / (1024 * 1024)).toFixed(2));
+    const finalVersion = version || "1.0.0";
+    const finalNotes = releaseNotes || "نسخه جدید اپلیکیشن اندروید سامانه تهذیب";
+
+    // Update metadata update.json
+    const updateConfig = {
+      version: finalVersion,
+      releaseNotes: finalNotes,
+      apkKey: "updates/tahzib-app.apk",
+      forceUpdate: Boolean(forceUpdate),
+      fileSizeMb,
+      hasApk: true,
+      downloadUrl: "/download/tahzib.apk",
+      updatedAt: new Date().toISOString()
+    };
+
+    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
+    fs.writeFileSync(updateJsonPath, JSON.stringify(updateConfig, null, 2), "utf-8");
+
+    return res.json({
+      success: true,
+      message: `فایل APK نسخه ${finalVersion} با حجم ${fileSizeMb} مگابایت با موفقیت در سرور مستقر گردید.`,
+      downloadUrl: "/download/tahzib.apk",
+      fileSizeMb,
+      version: finalVersion
+    });
+  } catch (error: any) {
+    console.error("APK Upload Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: `خطا در ذخیره فایل APK روی سرور: ${error.message}`
+    });
+  }
+});
+
+// ==========================================
 // Live Update API endpoints (Local Storage backed)
 // ==========================================
 
