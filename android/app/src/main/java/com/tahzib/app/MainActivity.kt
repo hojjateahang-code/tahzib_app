@@ -83,20 +83,39 @@ class MainActivity : AppCompatActivity() {
                 }
                 return super.shouldInterceptRequest(view, request)
             }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: android.webkit.WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                val failingUrl = request?.url.toString()
+                if (request?.isForMainFrame == true && failingUrl.startsWith("http")) {
+                    Log.w("MainActivity", "Server unreachable: $failingUrl. Falling back to local appassets.")
+                    view?.loadUrl(BuildConfig.FALLBACK_ASSET_URL)
+                }
+            }
         }
 
-        // دریافت آدرس سرور یا استفاده از لودر امن محلی جهت کارکرد کامل آفلاین
-        var appUrl = BuildConfig.SERVER_URL
-        if (appUrl.isNullOrEmpty() || 
-            appUrl.contains("run.app") || 
-            appUrl.contains("google") || 
-            appUrl.startsWith("file://")
-        ) {
-            appUrl = "https://appassets.androidplatform.net/index.html"
+        // بارگذاری آدرس فعال سرور با اولویت تنظیمات سفارشی مسئول فنی
+        reloadAppUrl()
+    }
+
+    /**
+     * بارگذاری مجدد برنامه بر اساس آدرس سرور زنده یا سفارشی
+     */
+    fun reloadAppUrl() {
+        val prefs = getSharedPreferences("tahzib_config", Context.MODE_PRIVATE)
+        val customUrl = prefs.getString("custom_server_url", null)
+        val targetUrl = if (!customUrl.isNullOrBlank()) {
+            customUrl.trim()
+        } else {
+            BuildConfig.SERVER_URL
         }
-        
-        Log.i("MainActivity", "Loading URL in WebView: $appUrl")
-        webView.loadUrl(appUrl)
+
+        Log.i("MainActivity", "Loading Live URL in WebView: $targetUrl")
+        webView.loadUrl(targetUrl)
     }
 
     override fun onBackPressed() {

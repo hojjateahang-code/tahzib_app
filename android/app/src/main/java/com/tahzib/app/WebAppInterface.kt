@@ -48,6 +48,48 @@ class WebAppInterface(private val mContext: Context) {
      */
     @JavascriptInterface
     fun getServerUrl(): String {
-        return BuildConfig.REMOTE_SERVER_URL
+        val prefs = mContext.getSharedPreferences("tahzib_config", Context.MODE_PRIVATE)
+        val custom = prefs.getString("custom_server_url", null)
+        return if (!custom.isNullOrBlank()) custom else BuildConfig.REMOTE_SERVER_URL
+    }
+
+    /**
+     * ۵. تنظیم آدرس جدید سرور توسط مدیر/مسئول فنی
+     */
+    @JavascriptInterface
+    fun setServerUrl(newUrl: String): Boolean {
+        return try {
+            val prefs = mContext.getSharedPreferences("tahzib_config", Context.MODE_PRIVATE)
+            prefs.edit().putString("custom_server_url", newUrl.trim()).apply()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * ۶. بازنشانی آدرس سرور به حالت پیش‌فرض
+     */
+    @JavascriptInterface
+    fun resetServerUrl(): Boolean {
+        return try {
+            val prefs = mContext.getSharedPreferences("tahzib_config", Context.MODE_PRIVATE)
+            prefs.edit().remove("custom_server_url").apply()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * ۷. رفرش و بارگذاری مجدد برنامه با آدرس جدید
+     */
+    @JavascriptInterface
+    fun reloadApp() {
+        if (mContext is MainActivity) {
+            mContext.runOnUiThread {
+                mContext.reloadAppUrl()
+            }
+        }
     }
 }

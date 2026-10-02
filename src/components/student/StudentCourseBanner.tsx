@@ -36,8 +36,8 @@ export function StudentCourseBanner() {
 
   // Queries
   const activeCourses = useLiveQuery(
-    () => db.tahzibCourses.where('isActive').equals(1).toArray().then(list => 
-      list.filter(c => c.isActive && !c.isDeleted)
+    () => db.tahzibCourses.toArray().then(list => 
+      list.filter(c => Boolean(c.isActive) && !c.isDeleted)
     ),
     []
   ) || [];

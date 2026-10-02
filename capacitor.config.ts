@@ -5,8 +5,9 @@ const config: CapacitorConfig = {
   appName: 'Tahzib App',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
-    cleartext: true
+    url: 'http://77.238.122.209:3000',
+    cleartext: true,
+    androidScheme: 'https'
   }
 };
 

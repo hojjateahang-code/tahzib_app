@@ -12,10 +12,12 @@ import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 import { StudentLeaderboardView } from './leaderboard/StudentLeaderboardView';
 import { StudentCourseBanner } from './student/StudentCourseBanner';
+import { StudentCoursesView } from './student/StudentCoursesView';
+import { GraduationCap } from 'lucide-react';
 
 export function StudentPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
+  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'COURSES' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -54,9 +56,24 @@ export function StudentPanel() {
     [currentUser?.id]
   );
 
+  // Live queries for active courses badge
+  const activeCoursesCount = useLiveQuery(
+    async () => {
+      if (!currentUser) return 0;
+      const all = await db.tahzibCourses.toArray();
+      const myBase = currentUser.base || 1;
+      const active = all.filter(c => Boolean(c.isActive) && !c.isDeleted && (!c.targetBases || c.targetBases.length === 0 || c.targetBases.includes(myBase)));
+      return active.length;
+    },
+    [currentUser?.id, currentUser?.base]
+  );
+
   const getBadge = (tabId: string) => {
     if (tabId === 'MESSAGES' && unreadMessagesCount && unreadMessagesCount > 0) {
       return unreadMessagesCount;
+    }
+    if (tabId === 'COURSES' && activeCoursesCount && activeCoursesCount > 0) {
+      return activeCoursesCount;
     }
     if (tabId === 'ASSESSMENT' && !todaySubmitted) {
       return '!';
@@ -66,6 +83,7 @@ export function StudentPanel() {
 
   const tabs = [
     { id: 'ASSESSMENT', label: 'ارزیابی', icon: CheckCircle },
+    { id: 'COURSES', label: 'دوره‌ها و کارگاه‌ها', icon: GraduationCap },
     { id: 'LEADERBOARD', label: 'امتیازات و رتبه', icon: Trophy },
     { id: 'CHART', label: 'آمار', icon: BarChart2 },
     { id: 'NOTES', label: 'یادداشت', icon: Lock },
@@ -128,6 +146,7 @@ export function StudentPanel() {
       {/* Content Area */}
       <div className="flex-1">
         {activeTab === 'ASSESSMENT' && <StudentSelfAssessment />}
+        {activeTab === 'COURSES' && <StudentCoursesView />}
         {activeTab === 'LEADERBOARD' && <StudentLeaderboardView />}
         {activeTab === 'CHART' && <StudentProgressChart />}
         {activeTab === 'NOTES' && <StudentNotes />}

@@ -5,7 +5,7 @@
  */
 
 const STORAGE_KEY_CUSTOM_SERVER = 'custom_server_api_url';
-export const DEFAULT_PRODUCTION_SERVER = 'https://ais-pre-ef5fjznqypc7c7a4bgzzpu-584824184963.us-west2.run.app';
+export const DEFAULT_PRODUCTION_SERVER = 'http://77.238.122.209:3000';
 
 /**
  * دریافت آدرس ذخیره‌شده توسط کاربر در حافظه محلی
@@ -16,15 +16,31 @@ export function getStoredServerUrl(): string {
 }
 
 /**
- * ذخیره آدرس دلخواه سرور
+ * ذخیره آدرس دلخواه سرور و همگام‌سازی با پل نیتیو اندروید
  */
 export function setStoredServerUrl(url: string): void {
   if (typeof window === 'undefined') return;
   const clean = url.trim().replace(/\/+$/, '');
   if (!clean) {
     localStorage.removeItem(STORAGE_KEY_CUSTOM_SERVER);
+    const win = window as any;
+    if (win.AndroidBridge && typeof win.AndroidBridge.resetServerUrl === 'function') {
+      try {
+        win.AndroidBridge.resetServerUrl();
+      } catch (e) {
+        console.warn('AndroidBridge reset error:', e);
+      }
+    }
   } else {
     localStorage.setItem(STORAGE_KEY_CUSTOM_SERVER, clean);
+    const win = window as any;
+    if (win.AndroidBridge && typeof win.AndroidBridge.setServerUrl === 'function') {
+      try {
+        win.AndroidBridge.setServerUrl(clean);
+      } catch (e) {
+        console.warn('AndroidBridge setServerUrl error:', e);
+      }
+    }
   }
 }
 
