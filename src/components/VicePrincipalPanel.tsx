@@ -2,19 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { ClipboardList, Users, CheckSquare, User as UserIcon, Mail, Sparkles } from 'lucide-react';
+import { ClipboardList, Users, CheckSquare, User as UserIcon, Mail, Sparkles, Trophy } from 'lucide-react';
 import { VicePrincipalDashboard } from './vice-principal/VicePrincipalDashboard';
 import { VicePrincipalTasks } from './vice-principal/VicePrincipalTasks';
 import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
 import { TahzibProgramsManagement } from './vice-principal/TahzibProgramsManagement';
 import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
+import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 
 import { getTaskPeriodKey } from '../utils/taskUtils';
 
 export function VicePrincipalPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TASKS' | 'USERS' | 'TAHZIB_PROGRAMS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TASKS' | 'USERS' | 'TAHZIB_PROGRAMS' | 'LEADERBOARD' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -75,6 +76,7 @@ export function VicePrincipalPanel() {
     { id: 'TASKS', label: 'تقویم', icon: CheckSquare },
     { id: 'USERS', label: 'کاربران', icon: Users },
     { id: 'TAHZIB_PROGRAMS', label: 'امورات تهذیبی', icon: Sparkles },
+    { id: 'LEADERBOARD', label: 'رتبه‌بندی و امتیازات', icon: Trophy },
     { id: 'MESSAGES', label: 'پیام‌ها', icon: Mail },
     { id: 'PROFILE', label: 'پروفایل', icon: UserIcon }
   ] as const;
@@ -119,6 +121,7 @@ export function VicePrincipalPanel() {
         {activeTab === 'TASKS' && <VicePrincipalTasks />}
         {activeTab === 'USERS' && <VicePrincipalUsers />}
         {activeTab === 'TAHZIB_PROGRAMS' && <TahzibProgramsManagement />}
+        {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="VICE_PRINCIPAL" />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
         {activeTab === 'PROFILE' && <StudentProfile />}
       </div>

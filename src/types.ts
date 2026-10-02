@@ -69,9 +69,43 @@ export interface TahzibProgram extends BaseEntity {
   unit?: string; // e.g. 'صفحه', 'دقیقه', 'بار'
   targetBases?: number[]; // e.g. [1, 2, 3] or [] for ALL bases
   order?: number; // Display sequence order
+  score?: number; // Assigned points for completing this program (default 15)
   isActive: boolean;
   createdAt: string;
   createdBy?: string;
+}
+
+export interface TahzibCourse extends BaseEntity {
+  id: string;
+  title: string;
+  type: 'IN_PERSON' | 'VIRTUAL' | 'HYBRID';
+  instructor?: string;
+  description?: string;
+  locationOrLink?: string;
+  targetBases?: number[]; // Empty array or undefined means all bases
+  score: number; // Reward points upon completion (e.g. 50, 70, 100)
+  durationDays: number; // Deadline period in days (e.g. 10)
+  startDate: string; // ISO date string YYYY-MM-DD
+  endDate: string; // ISO date string YYYY-MM-DD
+  requiresDocument: boolean; // Whether document/certificate upload is required
+  documentInstructions?: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface StudentCourseEnrollment extends BaseEntity {
+  id: string;
+  courseId: string;
+  studentId: string;
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+  startedAt?: string; // ISO timestamp when student started (Step 1)
+  completedAt?: string; // ISO timestamp when completed (Step 2)
+  completionDocumentUrl?: string; // Uploaded certificate/document URL
+  documentName?: string;
+  notes?: string;
+  scoreAwarded: number;
+  synced: boolean;
 }
 
 export interface PersonalHabit extends BaseEntity {

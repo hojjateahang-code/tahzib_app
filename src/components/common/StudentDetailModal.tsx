@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { 
   X, Phone, MessageSquare, User, Calendar, ShieldCheck, 
-  BarChart2, Smartphone, FileText, CheckCircle2, AlertCircle, ExternalLink, Clock, BookOpen, Info, Activity
+  BarChart2, Smartphone, FileText, CheckCircle2, AlertCircle, ExternalLink, Clock, BookOpen, Info, Activity,
+  Trophy, Flame
 } from 'lucide-react';
 import { StudentAssessmentDetails } from '../student/StudentAssessmentDetails';
 import { StudentScreenTimeChart } from '../student/StudentScreenTimeChart';
@@ -11,6 +12,12 @@ import { StudentProgressChart } from '../student/StudentProgressChart';
 import { SupervisorStudentNotes } from '../supervisor/SupervisorStudentNotes';
 import { ReportContentDisplay } from './ReportContentDisplay';
 import { getReportAuthorInfo } from '../../utils/reportUtils';
+import { 
+  calculateStreaks, 
+  getLevelDetails, 
+  calculateSingleAssessmentScore, 
+  calculateStreakBonus 
+} from '../../utils/scoringSystem';
 
 interface Props {
   studentId: string | null;
@@ -77,6 +84,19 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
   // Get screen time logs
   const screenTimeLogs = assessments?.filter(a => a.screenTime) || [];
 
+  const scoreInfo = useMemo(() => {
+    if (!assessments || assessments.length === 0) return null;
+    const dates = assessments.map(a => a.date);
+    const { currentStreak } = calculateStreaks(dates);
+    let totalScore = calculateStreakBonus(currentStreak);
+    assessments.forEach(a => {
+      const b = calculateSingleAssessmentScore(a);
+      totalScore += (b.prayers + b.coreTasks + b.tahzibPrograms + b.habits + b.digitalDiscipline + b.consistency);
+    });
+    const level = getLevelDetails(totalScore);
+    return { totalScore, currentStreak, level };
+  }, [assessments]);
+
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-150">
       <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -102,6 +122,21 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
                   <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
                     در انتظار تایید
+                  </span>
+                )}
+                {scoreInfo && (
+                  <span className="text-[10px] font-black bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1.5 shadow-2xs">
+                    <Trophy className="w-3 h-3 text-amber-400" />
+                    <span>{scoreInfo.level.title}</span>
+                    <span className="opacity-50">•</span>
+                    <span>{scoreInfo.totalScore.toLocaleString('fa-IR')} امتیاز</span>
+                    {scoreInfo.currentStreak > 0 && (
+                      <>
+                        <span className="opacity-50">•</span>
+                        <Flame className="w-2.5 h-2.5 text-orange-400" />
+                        <span>{scoreInfo.currentStreak} روز مداومت</span>
+                      </>
+                    )}
                   </span>
                 )}
               </div>

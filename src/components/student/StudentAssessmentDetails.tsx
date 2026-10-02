@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
-import { Calendar, FileText, CheckCircle2, XCircle, AlertCircle, MessageSquare, Smartphone, Moon, Clock, Lock, CheckCheck } from 'lucide-react';
+import { Calendar, FileText, CheckCircle2, XCircle, AlertCircle, MessageSquare, Smartphone, Moon, Clock, Lock, CheckCheck, Trophy, Sparkles } from 'lucide-react';
+import { calculateSingleAssessmentScore } from '../../utils/scoringSystem';
 
 interface Props {
   studentId: string;
@@ -75,6 +76,41 @@ export function StudentAssessmentDetails({ studentId }: Props) {
 
       {activeAssessment ? (
         <div className="space-y-4 pt-4">
+          {(() => {
+            const dayScore = calculateSingleAssessmentScore(activeAssessment);
+            const totalDayScore = dayScore.prayers + dayScore.coreTasks + dayScore.tahzibPrograms + dayScore.habits + dayScore.digitalDiscipline + dayScore.consistency;
+            return (
+              <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-emerald-500/10 border border-amber-400/30 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span className="p-1 bg-amber-400/20 text-amber-500 rounded-lg">
+                    <Trophy className="w-4 h-4" />
+                  </span>
+                  <span className="font-extrabold text-slate-800 dark:text-slate-100">
+                    امتیاز کسب شده در این روز:
+                  </span>
+                  <span className="font-black text-amber-600 dark:text-amber-400 text-sm bg-amber-100/60 dark:bg-amber-950/60 px-2 py-0.5 rounded-lg border border-amber-300 dark:border-amber-800">
+                    {totalDayScore.toLocaleString('fa-IR')} امتیاز
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5 text-[11px] text-slate-600 dark:text-slate-300 font-medium flex-wrap">
+                  <span>نمازها: <strong className="text-emerald-600 dark:text-emerald-400 font-black">{dayScore.prayers}</strong></span>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  <span>سنن و مباحثه: <strong className="text-indigo-600 dark:text-indigo-400 font-black">{dayScore.coreTasks}</strong></span>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  <span>برنامه‌های تهذیبی: <strong className="text-teal-600 dark:text-teal-400 font-black">{dayScore.tahzibPrograms}</strong></span>
+                  {dayScore.digitalDiscipline > 0 && (
+                    <>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <span>انضباط گوشی: <strong className="text-purple-600 dark:text-purple-400 font-black">{dayScore.digitalDiscipline}</strong></span>
+                    </>
+                  )}
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  <span>نظم ثبت: <strong className="text-blue-600 dark:text-blue-400 font-black">{dayScore.consistency}</strong></span>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-2xl flex gap-1.5 overflow-x-auto hide-scrollbar border border-slate-200/40 dark:border-slate-700/40 w-full sm:w-auto self-start">
             <button
               onClick={() => setActiveTab('PRAYERS')}

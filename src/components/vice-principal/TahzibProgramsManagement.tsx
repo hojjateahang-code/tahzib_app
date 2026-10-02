@@ -25,12 +25,17 @@ import {
   ChevronsUp,
   ChevronsDown,
   SlidersHorizontal,
-  Zap
+  Zap,
+  GraduationCap,
+  Award
 } from 'lucide-react';
 import { triggerSync, getSynchronizedTime } from '../../sync';
 import type { TahzibProgram, TahzibCategory } from '../../types';
+import { TahzibCoursesManagement } from './TahzibCoursesManagement';
 
 export function TahzibProgramsManagement() {
+  const [activeSection, setActiveSection] = useState<'PROGRAMS' | 'COURSES'>('PROGRAMS');
+
   // Live Query for Programs & Categories
   const rawPrograms = useLiveQuery(() => db.tahzibPrograms.toArray()) || [];
   const activePrograms = rawPrograms.filter(p => !p.isDeleted);
@@ -65,6 +70,7 @@ export function TahzibProgramsManagement() {
   const [formUnit, setFormUnit] = useState<string>('صفحه');
   const [formTargetBases, setFormTargetBases] = useState<number[]>([]); // empty = ALL
   const [formOrder, setFormOrder] = useState<number>(1);
+  const [formScore, setFormScore] = useState<number>(15);
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
 
   // Category Management Modal State
@@ -86,6 +92,7 @@ export function TahzibProgramsManagement() {
     setFormUnit('صفحه');
     setFormTargetBases([]);
     setFormOrder(activePrograms.length + 1);
+    setFormScore(15);
     setFormIsActive(true);
     setShowProgramModal(true);
   };
@@ -102,6 +109,7 @@ export function TahzibProgramsManagement() {
     setFormUnit(prog.unit || 'صفحه');
     setFormTargetBases(prog.targetBases || []);
     setFormOrder(prog.order || 1);
+    setFormScore(prog.score || 15);
     setFormIsActive(prog.isActive !== false);
     setShowProgramModal(true);
   };
@@ -144,6 +152,7 @@ export function TahzibProgramsManagement() {
       : undefined;
 
     const validatedOrder = Number(formOrder) > 0 ? Number(formOrder) : 1;
+    const validatedScore = Number(formScore) > 0 ? Number(formScore) : 15;
 
     if (editingProgram) {
       await db.tahzibPrograms.update(editingProgram.id, {
@@ -155,6 +164,7 @@ export function TahzibProgramsManagement() {
         unit: formInputType === 'NUMERIC' ? (formUnit.trim() || 'عدد') : undefined,
         targetBases: formTargetBases,
         order: validatedOrder,
+        score: validatedScore,
         isActive: formIsActive,
         updatedAt: now
       });
@@ -169,6 +179,7 @@ export function TahzibProgramsManagement() {
         unit: formInputType === 'NUMERIC' ? (formUnit.trim() || 'عدد') : undefined,
         targetBases: formTargetBases,
         order: validatedOrder,
+        score: validatedScore,
         isActive: formIsActive,
         createdAt: new Date(now).toISOString(),
         updatedAt: now
@@ -394,8 +405,41 @@ export function TahzibProgramsManagement() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200 dir-rtl">
       
-      {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
+      {/* Sub-tab Navigation */}
+      <div className="bg-white dark:bg-slate-900 p-2 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveSection('PROGRAMS')}
+          className={`flex-1 py-3 px-4 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeSection === 'PROGRAMS'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>برنامه‌ها و سنن مستمر تهذیبی (روزانه / هفتگی)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSection('COURSES')}
+          className={`flex-1 py-3 px-4 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeSection === 'COURSES'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          <span>دوره‌ها و کارگاه‌های آموزشی-تهذیبی</span>
+        </button>
+      </div>
+
+      {activeSection === 'COURSES' ? (
+        <TahzibCoursesManagement />
+      ) : (
+        <>
+          {/* Header Banner */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -1019,19 +1063,37 @@ export function TahzibProgramsManagement() {
                 </div>
               </div>
 
-              {/* Order Sequence Input */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
-                  ترتیب اولویت نمایش در فرم طلاب (عدد ۱ یعنی اول از همه بالا قرار می‌گیرد):
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={formOrder}
-                  onChange={e => setFormOrder(Number(e.target.value) || 1)}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
-                />
+              {/* Order Sequence and Score Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    ترتیب اولویت نمایش در فرم طلاب:
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={formOrder}
+                    onChange={e => setFormOrder(Number(e.target.value) || 1)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/70 space-y-1">
+                  <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                    <span>امتیاز ثبت/انجام روزانه:</span>
+                    <span className="text-[10px] text-amber-600 font-normal">پیش‌فرض: ۱۵</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    required
+                    value={formScore}
+                    onChange={e => setFormScore(Number(e.target.value) || 15)}
+                    className="w-full bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg p-2 text-xs font-black outline-none focus:ring-2 focus:ring-amber-500 text-amber-700 dark:text-amber-400"
+                  />
+                </div>
               </div>
 
               {/* Is Active Toggle */}
@@ -1305,6 +1367,8 @@ export function TahzibProgramsManagement() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
     </div>

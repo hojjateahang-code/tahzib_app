@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { BarChart2, UserCheck, User as UserIcon, Users, FileText, Mail } from 'lucide-react';
+import { BarChart2, UserCheck, User as UserIcon, Users, FileText, Mail, Trophy } from 'lucide-react';
 import { DirectorDashboard } from './director/DirectorDashboard';
 import { StudentMonitoringList } from './StudentMonitoringList';
 import { MentorMonitoringList } from './vice-principal/MentorMonitoringList';
@@ -10,10 +10,11 @@ import { ReportsMonitoringList } from './vice-principal/ReportsMonitoringList';
 import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
 import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
+import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 
 export function DirectorPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'STUDENTS' | 'USERS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'STUDENTS' | 'LEADERBOARD' | 'USERS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
   const [activeSubTab, setActiveSubTab] = useState<'STUDENTS' | 'MENTORS' | 'REPORTS'>('STUDENTS');
 
   useEffect(() => {
@@ -56,6 +57,7 @@ export function DirectorPanel() {
   const tabs = [
     { id: 'DASHBOARD', label: 'داشبورد راهبردی', icon: BarChart2 },
     { id: 'STUDENTS', label: 'رصد طلاب', icon: UserCheck },
+    { id: 'LEADERBOARD', label: 'فاستبقوا الخیرات', icon: Trophy },
     { id: 'USERS', label: 'مدیریت کاربران و اکسل', icon: Users },
     { id: 'MESSAGES', label: 'پیام‌ها و مکاتبات', icon: Mail },
     { id: 'PROFILE', label: 'پروفایل', icon: UserIcon }
@@ -138,6 +140,7 @@ export function DirectorPanel() {
             </div>
           </div>
         )}
+        {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="DIRECTOR" />}
         {activeTab === 'USERS' && <VicePrincipalUsers />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
         {activeTab === 'PROFILE' && <StudentProfile />}

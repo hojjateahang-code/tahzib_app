@@ -197,7 +197,8 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
     autoExtractedFlag: boolean,
     isoTimestamp?: string,
     scUrl?: string,
-    noteText?: string
+    noteText?: string,
+    finalSubmittedFlag: boolean = true
   ) => {
     if (!currentUser) return;
 
@@ -220,7 +221,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
       dynamicApps: appsToSave,
       nightApps: nightToSave,
       autoExtracted: autoExtractedFlag,
-      isFinalSubmitted: true,
+      isFinalSubmitted: finalSubmittedFlag,
       extractedAt: isoTimestamp || extractedAt || new Date().toISOString(),
       screenshotUrl: scUrl !== undefined ? scUrl : screenshotUrl,
       notes: noteText !== undefined ? noteText : notes
@@ -325,17 +326,17 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
     setDynamicApps(extractedAll);
     setNightApps(extractedNight);
     setIsAutoExtracted(true);
-    setIsFinalSubmitted(true);
+    setIsFinalSubmitted(false);
     setExtractedAt(nowIso);
 
-    // Automatic final registration in DB
-    await persistScreenTime(extractedAll, extractedNight, true, nowIso);
+    // Save as draft extracted state in DB (isFinalSubmitted: false)
+    await persistScreenTime(extractedAll, extractedNight, true, nowIso, screenshotUrl, notes, false);
 
     const totalApps = Object.keys(extractedAll).length;
     const nightAppsCount = Object.keys(extractedNight).length;
 
-    setExtractNotice(`✅ آمار زنده گوشی استخراج و ثبت نهایی در سامانه انجام شد (${totalApps} برنامه فعال، ${nightAppsCount > 0 ? `${nightAppsCount} برنامه فعال بعد از ۱۰:۳۰ شب` : 'بدون فعالیت بعد از ۱۰:۳۰ شب'}). داده‌ها جهت جلوگیری از تغییر قفل شدند.`);
-    setTimeout(() => setExtractNotice(null), 6000);
+    setExtractNotice(`✅ آمار زنده گوشی استخراج شد (${totalApps} برنامه فعال، ${nightAppsCount > 0 ? `${nightAppsCount} برنامه فعال بعد از ۱۰:۳۰ شب` : 'بدون فعالیت بعد از ۱۰:۳۰ شب'}). اقلام جهت جلوگیری از دستکاری قفل شدند. برای تایید نهایی و محاسبه امتیاز، دکمه «ثبت آمار نهایی» را در پایین لمس کنید.`);
+    setTimeout(() => setExtractNotice(null), 7000);
   };
 
   // Calculations
@@ -1063,12 +1064,18 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
               <div className="flex items-center justify-between">
                 <h5 className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
                   <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span>استخراج رسمی و ثبت نهایی</span>
+                  <span>{isFinalSubmitted ? 'استخراج رسمی و ثبت نهایی' : 'استخراج رسمی (در انتظار ثبت)'}</span>
                 </h5>
-                <span className="text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                  <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                  ثبت نهایی
-                </span>
+                {isFinalSubmitted ? (
+                  <span className="text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                    <CheckCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    ثبت نهایی شده
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                    در انتظار تایید
+                  </span>
+                )}
               </div>
 
               <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/50 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-1.5">
@@ -1078,21 +1085,37 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
                 <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-relaxed">
                   به جهت حفظ امانت و اعتبار گزارش، اقلام استخراج‌شده قفل شده و امکان افزودن یا حذف دستی برنامه‌ها غیرفعال است.
                 </p>
+                {!isFinalSubmitted && (
+                  <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 p-2 rounded-xl border border-amber-200 dark:border-amber-800/80">
+                    ⚠️ توجه: ثبت نهایی تنها با زدن دکمه «ثبت آمار نهایی» انجام می‌شود تا پس از بررسی شما نهایی گردد.
+                  </p>
+                )}
               </div>
 
               {extractedAt && (
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <span>زمان استخراج و ثبت نهایی:</span>
+                  <span>زمان استخراج:</span>
                   <span className="font-mono font-bold text-slate-700 dark:text-slate-200" dir="ltr">
                     {new Date(extractedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               )}
 
+              {!isFinalSubmitted && (
+                <button
+                  type="button"
+                  onClick={() => handleSave()}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>تایید و ثبت نهایی آمار گوشی</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleExtractUsageStats}
-                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold py-2 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200 dark:border-slate-700"
               >
                 <RotateCw className="w-3.5 h-3.5" />
                 <span>استخراج مجدد و به‌روزرسانی زنده</span>

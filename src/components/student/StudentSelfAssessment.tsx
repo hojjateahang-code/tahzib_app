@@ -4,13 +4,14 @@ import { db } from '../../db';
 import { triggerSync } from '../../sync';
 import { Assessment, PrayerStatus } from '../../types';
 import { format, subDays, addDays, startOfToday, isBefore } from 'date-fns';
-import { CloudOff, Plus, Info, ChevronDown, ChevronUp, MessageSquarePlus, Calendar, AlertCircle, CheckCircle2, XCircle, Send, Star, Clock, X, Smartphone, Edit3, Trash2, Save } from 'lucide-react';
+import { CloudOff, Plus, Info, ChevronDown, ChevronUp, MessageSquarePlus, Calendar, AlertCircle, CheckCircle2, XCircle, Send, Star, Clock, X, Smartphone, Edit3, Trash2, Save, Trophy, Flame } from 'lucide-react';
 import DatePicker from "react-multi-date-picker";
 import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ScreenTimeTracker } from './ScreenTimeTracker';
 import { DebouncedTextInput } from '../common/DebouncedTextInput';
+import { calculateSingleAssessmentScore } from '../../utils/scoringSystem';
 
 const prayerOptions: { label: string; value: PrayerStatus }[] = [
   { label: 'انجام نشده', value: 'NONE' },
@@ -46,6 +47,13 @@ export function StudentSelfAssessment() {
     },
     [currentUser, selectedDate]
   );
+
+  const currentDayScore = useMemo(() => {
+    if (!assessment) return null;
+    const b = calculateSingleAssessmentScore(assessment);
+    const total = b.prayers + b.coreTasks + b.tahzibPrograms + b.habits + b.digitalDiscipline + b.consistency;
+    return { breakdown: b, total };
+  }, [assessment]);
 
   useEffect(() => {
     async function ensureAssessment() {
@@ -583,6 +591,50 @@ export function StudentSelfAssessment() {
               ثبت و ویرایش وضعیت ارزیابی مربوط به امروز و دیروز می‌باشد (اطلاعات این تاریخ فقط قابل مشاهده است).
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Live Calculated Score Card for This Date */}
+      {currentDayScore && currentDayScore.total > 0 && (
+        <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-emerald-950 p-4 rounded-3xl text-white shadow-md border border-indigo-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-amber-400/20 text-amber-300 rounded-2xl border border-amber-400/30">
+              <Trophy className="w-5 h-5 text-amber-400" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-300">امتیاز ثبت‌شده برای این روز:</span>
+                <span className="text-sm font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/30">
+                  {currentDayScore.total.toLocaleString('fa-IR')} امتیاز
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-300 mt-0.5 flex-wrap">
+                <span>نمازها: {currentDayScore.breakdown.prayers}</span>
+                <span>•</span>
+                <span>سنن و مباحثه: {currentDayScore.breakdown.coreTasks}</span>
+                <span>•</span>
+                <span>تهذیبی: {currentDayScore.breakdown.tahzibPrograms}</span>
+                {currentDayScore.breakdown.digitalDiscipline > 0 && (
+                  <>
+                    <span>•</span>
+                    <span>انضباط گوشی: {currentDayScore.breakdown.digitalDiscipline}</span>
+                  </>
+                )}
+                <span>•</span>
+                <span>نظم ثبت: {currentDayScore.breakdown.consistency}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('NAVIGATE_TAB', { detail: 'LEADERBOARD' }));
+            }}
+            className="self-end sm:self-center px-3.5 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold rounded-xl border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shadow-xs"
+          >
+            <span>مشاهده رتبه‌بندی (فاستبقوا الخیرات)</span>
+            <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+          </button>
         </div>
       )}
 

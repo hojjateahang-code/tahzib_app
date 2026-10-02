@@ -1,5 +1,9 @@
 import Dexie, { type Table } from 'dexie';
-import type { User, Task, Assessment, PrivateNote, Report, PersonalHabit, Appointment, Message, CustomGroup, TahzibProgram, TahzibCategory } from './types';
+import type { 
+  User, Task, Assessment, PrivateNote, Report, PersonalHabit, 
+  Appointment, Message, CustomGroup, TahzibProgram, TahzibCategory,
+  TahzibCourse, StudentCourseEnrollment 
+} from './types';
 
 export class SeminaryDB extends Dexie {
   users!: Table<User, string>;
@@ -13,6 +17,8 @@ export class SeminaryDB extends Dexie {
   customGroups!: Table<CustomGroup, string>;
   tahzibPrograms!: Table<TahzibProgram, string>;
   tahzibCategories!: Table<TahzibCategory, string>;
+  tahzibCourses!: Table<TahzibCourse, string>;
+  studentCourseEnrollments!: Table<StudentCourseEnrollment, string>;
 
   constructor() {
     super('SeminaryDB');
@@ -123,6 +129,22 @@ export class SeminaryDB extends Dexie {
       tahzibPrograms: 'id, category, isActive',
       tahzibCategories: 'id, name'
     });
+
+    this.version(12).stores({
+      users: 'id, role, username, nationalId, base',
+      tasks: 'id, roleTarget, assignedTo, date, isCompleted',
+      personalHabits: 'id, studentId',
+      assessments: 'id, studentId, date, synced',
+      privateNotes: 'id, studentId, date',
+      reports: 'id, authorId, studentId, type, date, synced',
+      appointments: 'id, studentId, counselorId, date, status',
+      messages: 'id, senderId, recipientId, type, date, isRead',
+      customGroups: 'id, ownerId, name',
+      tahzibPrograms: 'id, category, isActive',
+      tahzibCategories: 'id, name',
+      tahzibCourses: 'id, isActive, startDate, endDate',
+      studentCourseEnrollments: 'id, courseId, studentId, status, synced'
+    });
   }
 }
 
@@ -145,6 +167,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     category: 'عبادی',
     inputType: 'BOOLEAN',
     order: 1,
+    score: 25,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -156,6 +179,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     inputType: 'NUMERIC',
     unit: 'صفحه',
     order: 2,
+    score: 15,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -167,6 +191,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     inputType: 'MULTICHOICE',
     options: ['کامل', 'ناقص (با تاخیر یا غیبت)', 'عدم شرکت'],
     order: 3,
+    score: 15,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -178,6 +203,7 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     inputType: 'MULTICHOICE',
     options: ['کامل', 'ناقص', 'انجام نشد'],
     order: 4,
+    score: 15,
     isActive: true,
     createdAt: new Date().toISOString()
   },
@@ -188,6 +214,18 @@ const DEFAULT_TAHZIB_PROGRAMS: TahzibProgram[] = [
     category: 'عمومی',
     inputType: 'BOOLEAN',
     order: 5,
+    score: 10,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'prog_heyat',
+    title: 'حضور در هیئت هفتگی مدرسه',
+    description: 'شرکت در مراسم توسل، ذکر اهل‌بیت (ع) و هیئت هفتگی طلاب مدرسه',
+    category: 'عبادی',
+    inputType: 'BOOLEAN',
+    order: 6,
+    score: 20,
     isActive: true,
     createdAt: new Date().toISOString()
   }
@@ -262,6 +300,46 @@ export async function seedDatabase() {
     const existingProgramsCount = await db.tahzibPrograms.count();
     if (existingProgramsCount === 0) {
       await db.tahzibPrograms.bulkAdd(DEFAULT_TAHZIB_PROGRAMS);
+    } else {
+      // Ensure prog_heyat exists
+      const heyatProg = await db.tahzibPrograms.get('prog_heyat');
+      if (!heyatProg) {
+        await db.tahzibPrograms.add({
+          id: 'prog_heyat',
+          title: 'حضور در هیئت هفتگی مدرسه',
+          description: 'شرکت در مراسم توسل، ذکر اهل‌بیت (ع) و هیئت هفتگی طلاب مدرسه',
+          category: 'عبادی',
+          inputType: 'BOOLEAN',
+          order: 6,
+          score: 20,
+          isActive: true,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // Ensure sample Tahzib Course exists if table is empty
+    const existingCoursesCount = await db.tahzibCourses.count();
+    if (existingCoursesCount === 0) {
+      const now = new Date();
+      const end = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000); // 10 days deadline
+      await db.tahzibCourses.add({
+        id: 'course_helm',
+        title: 'کارگاه مهارت‌های حلم، مدارا و سعه صدر طلبگی',
+        type: 'HYBRID',
+        instructor: 'حجت‌الاسلام والمسلمین دکتر رفیعی',
+        description: 'دوره کاربردی مهار خشم، سعه صدر در معاشرت اجتماعی و زیست اخلاقی طلبه. شرکت در جلسات و ثبت خلاصه مباحث الزامی است.',
+        locationOrLink: 'سالن اجتماعات مدرسه علمیه / پخش زنده در پیام‌رسان ایتا',
+        targetBases: [], // all bases
+        score: 70,
+        durationDays: 10,
+        startDate: now.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+        requiresDocument: true,
+        documentInstructions: 'لطفاً تصویر گواهی پایان دوره یا خلاصه ۲ صفحه‌ای مباحث کارگاه را بارگذاری نمایید.',
+        isActive: true,
+        createdAt: now.toISOString()
+      });
     }
   } catch (err) {
     console.error('Error seeding database:', err);

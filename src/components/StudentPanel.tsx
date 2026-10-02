@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { CheckCircle, Lock, BarChart2, User as UserIcon, Calendar, Mail, Smartphone } from 'lucide-react';
+import { CheckCircle, Lock, BarChart2, User as UserIcon, Calendar, Mail, Smartphone, Trophy } from 'lucide-react';
 import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../utils/assessmentUtils';
 import { StudentSelfAssessment } from './student/StudentSelfAssessment';
 import { StudentProgressChart } from './student/StudentProgressChart';
@@ -10,10 +10,12 @@ import { StudentScreenTimeChart } from './student/StudentScreenTimeChart';
 import { StudentNotes } from './student/StudentNotes';
 import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
+import { StudentLeaderboardView } from './leaderboard/StudentLeaderboardView';
+import { StudentCourseBanner } from './student/StudentCourseBanner';
 
 export function StudentPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'CHART' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
+  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -64,6 +66,7 @@ export function StudentPanel() {
 
   const tabs = [
     { id: 'ASSESSMENT', label: 'ارزیابی', icon: CheckCircle },
+    { id: 'LEADERBOARD', label: 'امتیازات و رتبه', icon: Trophy },
     { id: 'CHART', label: 'آمار', icon: BarChart2 },
     { id: 'NOTES', label: 'یادداشت', icon: Lock },
     { id: 'MESSAGES', label: 'پیام', icon: Mail },
@@ -119,9 +122,13 @@ export function StudentPanel() {
         </div>
       </div>
 
+      {/* Intelligent Tahzib Course Announcement & Daily Reminder Banner */}
+      <StudentCourseBanner />
+
       {/* Content Area */}
       <div className="flex-1">
         {activeTab === 'ASSESSMENT' && <StudentSelfAssessment />}
+        {activeTab === 'LEADERBOARD' && <StudentLeaderboardView />}
         {activeTab === 'CHART' && <StudentProgressChart />}
         {activeTab === 'NOTES' && <StudentNotes />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}

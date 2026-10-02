@@ -2,17 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { UserCheck, CheckSquare, User as UserIcon, Mail } from 'lucide-react';
+import { UserCheck, CheckSquare, User as UserIcon, Mail, Trophy } from 'lucide-react';
 import { MentorDashboard } from './mentor/MentorDashboard';
 import { MentorStudents } from './mentor/MentorStudents';
 import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
+import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 
 import { getTaskPeriodKey } from '../utils/taskUtils';
 
 export function MentorPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'STUDENTS' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'STUDENTS' | 'LEADERBOARD' | 'MESSAGES' | 'PROFILE'>('DASHBOARD');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -62,6 +63,7 @@ export function MentorPanel() {
   const tabs = [
     { id: 'DASHBOARD', label: 'کارتابل', icon: CheckSquare },
     { id: 'STUDENTS', label: 'رصد', icon: UserCheck },
+    { id: 'LEADERBOARD', label: 'امتیازات و رتبه', icon: Trophy },
     { id: 'MESSAGES', label: 'پیام‌ها', icon: Mail },
     { id: 'PROFILE', label: 'پروفایل', icon: UserIcon }
   ] as const;
@@ -104,6 +106,7 @@ export function MentorPanel() {
       <div className="flex-1">
         {activeTab === 'DASHBOARD' && <MentorDashboard />}
         {activeTab === 'STUDENTS' && <MentorStudents />}
+        {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="MENTOR" />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
         {activeTab === 'PROFILE' && <StudentProfile />}
       </div>
