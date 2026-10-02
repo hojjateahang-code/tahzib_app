@@ -1,45 +1,53 @@
-import { getApiUrl } from './apiConfig';
+import { getAbsoluteApiUrl } from './apiConfig';
 
 /**
  * دانلود مستقیم و مطمئن فایل APK اپلیکیشن اندروید تهذیب در تمامی محیط‌ها
- * (Android WebView, Chrome, Firefox, Eitaa, Desktop)
+ * (برنامک ایتا، WebView اندروید، Chrome، Firefox و دسکتاپ)
  */
 export function triggerApkDownload(customUrl?: string) {
-  const downloadUrl = customUrl
-    ? (customUrl.startsWith('http') ? customUrl : getApiUrl(customUrl))
-    : getApiUrl('/download/tahzib.apk');
+  // همیشه از آدرس مطلق شامل IP و پورت سرور استفاده می‌کنیم تا در ایتا و WebView مسدود نشود
+  const absoluteUrl = customUrl
+    ? (customUrl.startsWith('http://') || customUrl.startsWith('https://') ? customUrl : getAbsoluteApiUrl(customUrl))
+    : getAbsoluteApiUrl('/download/tahzib.apk');
 
-  // ۱. بررسی وجود پل نیتیو اندروید (AndroidBridge) جهت فراخوانی مستقیم Intent
-  if (typeof (window as any).AndroidBridge !== 'undefined') {
-    if (typeof (window as any).AndroidBridge.downloadApkFile === 'function') {
+  console.log("Triggering APK Download URL:", absoluteUrl);
+
+  // ۱. پشتیبانی اختصاصی از کیت توسعه پیام‌رسان ایتا و تلگرام (Eitaa / Telegram MiniApp SDK)
+  const eitaaSdk = (window as any).Eitaa?.WebApp || (window as any).Telegram?.WebApp;
+  if (eitaaSdk) {
+    if (typeof eitaaSdk.openLink === 'function') {
       try {
-        const handled = (window as any).AndroidBridge.downloadApkFile(downloadUrl);
+        eitaaSdk.openLink(absoluteUrl);
+        return;
+      } catch (e) {
+        console.warn("Eitaa openLink failed, trying fallbacks:", e);
+      }
+    }
+  }
+
+  // ۲. بررسی وجود پل نیتیو اندروید (AndroidBridge) جهت فراخوانی مستقیم دانلودکننده نیتیو دستگاه
+  if (typeof (window as any).AndroidBridge !== 'undefined') {
+    const bridge = (window as any).AndroidBridge;
+    if (typeof bridge.downloadApkFile === 'function') {
+      try {
+        const handled = bridge.downloadApkFile(absoluteUrl);
         if (handled) return;
       } catch (e) {
         console.warn('AndroidBridge.downloadApkFile error:', e);
       }
     }
-    if (typeof (window as any).AndroidBridge.showToast === 'function') {
-      (window as any).AndroidBridge.showToast('در حال شروع دانلود فایل APK...');
+    if (typeof bridge.showToast === 'function') {
+      bridge.showToast('در حال شروع دانلود فایل APK...');
     }
   }
 
-  // ۲. ایجاد عنصر <a> موقت با صفت download جهت فورس دانلود در مرورگرها
+  // ۳. باز کردن مستقیم آدرس مطلق در پنجره جدید مرورگر یا ریدایرکت اصلی
   try {
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.setAttribute('download', 'tahzib-app.apk');
-    link.setAttribute('target', '_blank');
-    link.setAttribute('rel', 'noopener noreferrer');
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      if (document.body.contains(link)) {
-        document.body.removeChild(link);
-      }
-    }, 200);
+    const win = window.open(absoluteUrl, '_system') || window.open(absoluteUrl, '_blank');
+    if (!win) {
+      window.location.href = absoluteUrl;
+    }
   } catch (e) {
-    // در صورت مسدود شدن، تغییر آدرس پنجره اصلی
-    window.location.href = downloadUrl;
+    window.location.href = absoluteUrl;
   }
 }

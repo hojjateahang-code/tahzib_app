@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Download, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, AppWindow, Smartphone, X } from 'lucide-react';
-import { getApiUrl } from '../../lib/apiConfig';
+import { getApiUrl, getAbsoluteApiUrl } from '../../lib/apiConfig';
 import { triggerApkDownload } from '../../lib/downloadHelper';
 
 export const CURRENT_VERSION = "1.0.0"; // The current hardcoded version of the running client code
@@ -90,8 +90,8 @@ export function LiveUpdateChecker() {
           window.location.reload();
         }, 1000);
       } else {
-        // دانلود مطمئن فایل APK با triggerApkDownload
-        const downloadEndpoint = updateInfo.apkUrl ? (updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getApiUrl(updateInfo.apkUrl)) : getApiUrl('/download/tahzib.apk');
+        // دانلود مطمئن فایل APK با triggerApkDownload و آدرس مطلق
+        const downloadEndpoint = updateInfo.apkUrl ? (updateInfo.apkUrl.startsWith('http') ? updateInfo.apkUrl : getAbsoluteApiUrl(updateInfo.apkUrl)) : getAbsoluteApiUrl('/download/tahzib.apk');
         triggerApkDownload(downloadEndpoint);
 
         await new Promise(resolve => setTimeout(resolve, 2000));

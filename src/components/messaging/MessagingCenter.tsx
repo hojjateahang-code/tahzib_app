@@ -7,11 +7,11 @@ import {
   Send, Mail, MessageSquare, User as UserIcon, Check, CheckCheck, Clock, 
   FileText, Search, PlusCircle, Paperclip, Image as ImageIcon, Film, Music, 
   File, Users, FolderPlus, Trash2, X, AlertCircle, ArrowRight, Megaphone, Eye,
-  Smartphone, Download
+  Smartphone, Download, Copy
 } from 'lucide-react';
 import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
-import { getApiUrl } from '../../lib/apiConfig';
+import { getApiUrl, getAbsoluteApiUrl } from '../../lib/apiConfig';
 import { triggerApkDownload } from '../../lib/downloadHelper';
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -695,17 +695,39 @@ export function MessagingCenter() {
                           </div>
                           <div>
                             <span className="text-xs font-black text-slate-800 dark:text-slate-100 block">اپلیکیشن رسمی اندروید سامانه تهذیب</span>
-                            <span className="text-[10px] text-slate-500">نصب امن، پرسرعت و مستقیم بدون نمایش اطلاعات سرور</span>
+                            <span className="text-[10px] text-slate-500">نصب امن، پرسرعت و مستقیم (ویژه برنامک ایتا و اندروید)</span>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => triggerApkDownload()}
-                          className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>دانلود و نصب مستقیم برنامه</span>
-                        </button>
+
+                        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto shrink-0">
+                          <a
+                            href={getAbsoluteApiUrl('/download/tahzib.apk')}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              triggerApkDownload();
+                            }}
+                            className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span>دانلود و نصب مستقیم برنامه</span>
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = getAbsoluteApiUrl('/download/tahzib.apk');
+                              navigator.clipboard.writeText(url);
+                              alert('لینک مستقیم دانلود کپی شد:\n' + url);
+                            }}
+                            className="w-full sm:w-auto px-3 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+                            title="کپی لینک مستقیم فایل جهت پیست در مرورگر"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>کپی لینک</span>
+                          </button>
+                        </div>
                       </div>
                     )}
 

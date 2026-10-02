@@ -94,18 +94,42 @@ class WebAppInterface(private val mContext: Context) {
     }
 
     /**
-     * ۸. دانلود مستقیم فایل APK در مرورگر یا دانلودکننده نیتیو دستگاه
+     * ۸. دانلود مستقیم فایل APK در مدیریت دانلود نیتیو دستگاه یا مرورگر
      */
     @JavascriptInterface
     fun downloadApkFile(url: String): Boolean {
         return try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            mContext.startActivity(intent)
-            true
+            val request = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+            request.setTitle("سامانه تهذیب - فایل APK")
+            request.setDescription("در حال دریافت نسخه جدید اپلیکیشن اندروید...")
+            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, "tahzib-app.apk")
+            request.setMimeType("application/vnd.android.package-archive")
+
+            val manager = mContext.getSystemService(Context.DOWNLOAD_SERVICE) as? android.app.DownloadManager
+            if (manager != null) {
+                manager.enqueue(request)
+                if (mContext is MainActivity) {
+                    mContext.runOnUiThread {
+                        android.widget.Toast.makeText(mContext, "دانلود فایل APK آغاز شد. نوار اعلانات بالای گوشی را بررسی فرمایید.", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+                true
+            } else {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                mContext.startActivity(intent)
+                true
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
-            false
+            try {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                mContext.startActivity(intent)
+                true
+            } catch (ex: Exception) {
+                false
+            }
         }
     }
 

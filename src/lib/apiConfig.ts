@@ -101,6 +101,16 @@ export function getServerApiBaseUrl(): string {
 }
 
 /**
+ * دریافت آدرس کاملاً مطلق (همراه با دامنه و پورت سرور)
+ * برای دانلود مستقیم فایل‌ها یا ارجاع به لینک‌های خارجی (مانند ایتا و مرورگر)
+ */
+export function getAbsoluteApiUrl(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const baseUrl = getServerApiBaseUrl() || DEFAULT_PRODUCTION_SERVER;
+  return `${baseUrl.replace(/\/+$/, '')}${cleanPath}`;
+}
+
+/**
  * ساخت آدرس کامل برای ارسال درخواست به سرور
  */
 export function getApiUrl(path: string): string {
