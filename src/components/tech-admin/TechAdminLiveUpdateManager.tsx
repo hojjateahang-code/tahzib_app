@@ -45,8 +45,27 @@ export function TechAdminLiveUpdateManager() {
   const [version, setVersion] = useState('1.0.0');
   const [releaseNotes, setReleaseNotes] = useState('نسخه رسمی و هوشمند اپلیکیشن اندروید سامانه جامع تهذیب حوزه علمیه');
   const [selectedApkFile, setSelectedApkFile] = useState<File | null>(null);
-  const [sendBroadcastNotification, setSendBroadcastNotification] = useState(true);
+  
+  // تنظیم پیش‌فرض تیک نوتیفیکیشن همگانی بر روی false و ذخیره در localStorage تا لغو آن کلاً باقی بماند
+  const [sendBroadcastNotification, setSendBroadcastNotification] = useState<boolean>(() => {
+    const saved = localStorage.getItem('tech_admin_broadcast_notification');
+    return saved !== null ? saved === 'true' : false;
+  });
   const [forceUpdate, setForceUpdate] = useState(false);
+
+  // مرجع به اینپوت انتخاب فایل جهت فراخوانی مطمئن در اندروید و وب
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleBroadcastNotificationChange = (checked: boolean) => {
+    setSendBroadcastNotification(checked);
+    localStorage.setItem('tech_admin_broadcast_notification', String(checked));
+  };
+
+  const handleDropzoneClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
   // Dynamic Server URL Configuration
   const [currentServerUrl, setCurrentServerUrl] = useState(getServerApiBaseUrl());
@@ -287,19 +306,20 @@ export function TechAdminLiveUpdateManager() {
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 انتخاب فایل خروجی APK اندروید:
               </label>
-              <div className="border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 hover:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 rounded-2xl p-5 text-center transition-all">
+              <div 
+                onClick={handleDropzoneClick}
+                className="cursor-pointer border-2 border-dashed border-indigo-200 dark:border-indigo-900/60 hover:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 rounded-2xl p-5 text-center transition-all"
+              >
                 <input
+                  ref={fileInputRef}
                   type="file"
                   id="apk-file-input"
-                  accept=".apk"
+                  accept=".apk,application/vnd.android.package-archive,*/*"
                   onChange={handleFileChange}
-                  className="hidden"
+                  className="sr-only"
                   disabled={isUploadingApk}
                 />
-                <label 
-                  htmlFor="apk-file-input" 
-                  className="cursor-pointer flex flex-col items-center justify-center gap-2"
-                >
+                <div className="flex flex-col items-center justify-center gap-2">
                   <Smartphone className="w-8 h-8 text-indigo-500" />
                   {selectedApkFile ? (
                     <div className="space-y-1">
@@ -320,7 +340,7 @@ export function TechAdminLiveUpdateManager() {
                       </span>
                     </div>
                   )}
-                </label>
+                </div>
               </div>
             </div>
 
@@ -366,7 +386,7 @@ export function TechAdminLiveUpdateManager() {
                 <input
                   type="checkbox"
                   checked={sendBroadcastNotification}
-                  onChange={e => setSendBroadcastNotification(e.target.checked)}
+                  onChange={e => handleBroadcastNotificationChange(e.target.checked)}
                   className="w-4 h-4 text-indigo-600 rounded-md focus:ring-0 cursor-pointer"
                 />
                 <div>

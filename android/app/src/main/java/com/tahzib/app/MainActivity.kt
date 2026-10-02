@@ -86,17 +86,37 @@ class MainActivity : AppCompatActivity() {
                 this@MainActivity.filePathCallback?.onReceiveValue(null)
                 this@MainActivity.filePathCallback = filePathCallback
 
-                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
+                var intent: Intent? = null
+                try {
+                    intent = fileChooserParams?.createIntent()
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "fileChooserParams.createIntent failed", e)
+                }
+
+                if (intent == null) {
+                    intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                    }
                 }
 
                 try {
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE)
+                    val chooserIntent = Intent.createChooser(intent, "انتخاب فایل")
+                    startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
                 } catch (e: Exception) {
-                    this@MainActivity.filePathCallback = null
-                    Log.e("MainActivity", "Error launching file chooser: ${e.message}")
-                    return false
+                    try {
+                        val genericIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                        }
+                        val chooserIntent = Intent.createChooser(genericIntent, "انتخاب فایل")
+                        startActivityForResult(chooserIntent, FILE_CHOOSER_REQUEST_CODE)
+                    } catch (e2: Exception) {
+                        this@MainActivity.filePathCallback?.onReceiveValue(null)
+                        this@MainActivity.filePathCallback = null
+                        Log.e("MainActivity", "Error launching file chooser: ${e2.message}")
+                        return false
+                    }
                 }
                 return true
             }
