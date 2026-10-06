@@ -993,21 +993,21 @@ export function StudentSelfAssessment() {
                               <XCircle className="w-3.5 h-3.5" />
                               <span>انجام نشد</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateTahzibProgramAnswer(prog.id, 'HOLIDAY');
-                                if (prog.id === 'prog_sahar') updateField('saharKhizi', 'HOLIDAY');
-                                if (prog.id === 'prog_sleep') updateField('earlySleep', 'HOLIDAY');
-                              }}
-                              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                                currentAnswer === 'HOLIDAY' || currentAnswer === 'تعطیل' || currentAnswer === 'تعطیل است'
-                                  ? 'bg-amber-500 text-white border-amber-600 shadow-xs font-black'
-                                  : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/60 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-                              }`}
-                            >
-                              <span>🏖️ تعطیل است</span>
-                            </button>
+                            {prog.id !== 'prog_sahar' && prog.id !== 'prog_sleep' && !prog.title?.includes('سحر') && !prog.title?.includes('خواب') && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateTahzibProgramAnswer(prog.id, 'HOLIDAY');
+                                }}
+                                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                  currentAnswer === 'HOLIDAY' || currentAnswer === 'تعطیل' || currentAnswer === 'تعطیل است'
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs font-black'
+                                    : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/60 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                                }`}
+                              >
+                                <span>🏖️ تعطیل است</span>
+                              </button>
+                            )}
                           </div>
                         )}
 
