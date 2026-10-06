@@ -1,0 +1,32 @@
+name: Auto Deploy to Server
+
+on:
+  push:
+    branches:
+      - main # اگر نام برنچ اصلی شما چیز دیگری مثل master است، این را تغییر دهید
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get latest code
+        uses: actions/checkout@v4
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          source: "."
+          target: "/home/mfih/tahzib-app/"
+
+      - name: Restart Docker on Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            cd /home/mfih/tahzib-app
+            docker compose up -d --build

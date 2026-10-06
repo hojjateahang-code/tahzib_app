@@ -1,0 +1,9 @@
+{
+	"appId": "ir.lmsmfih.tahzib",
+	"appName": "Tahzib App",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true
+	}
+}
