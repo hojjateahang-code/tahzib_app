@@ -14,12 +14,16 @@ import {
   Server, 
   Layers, 
   FileCheck2,
-  HardDrive
+  HardDrive,
+  Megaphone,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { CURRENT_VERSION } from '../common/LiveUpdateChecker';
 import { getApiUrl, getServerApiBaseUrl, setStoredServerUrl } from '../../lib/apiConfig';
 import { db } from '../../db';
 import { triggerSync } from '../../sync';
+import { syncApkNoticeForAllUsers, removeApkNoticeForAllUsers } from '../../utils/apkNoticeSync';
 import type { Message } from '../../types';
 
 interface ApkInfo {
@@ -30,6 +34,9 @@ interface ApkInfo {
   hasApk: boolean;
   downloadUrl: string;
   forceUpdate?: boolean;
+  showDownloadNotice?: boolean;
+  noticeTitle?: string;
+  noticeContent?: string;
 }
 
 export function TechAdminLiveUpdateManager() {
@@ -46,20 +53,17 @@ export function TechAdminLiveUpdateManager() {
   const [releaseNotes, setReleaseNotes] = useState('نسخه رسمی و هوشمند اپلیکیشن اندروید سامانه جامع تهذیب حوزه علمیه');
   const [selectedApkFile, setSelectedApkFile] = useState<File | null>(null);
   
-  // تنظیم پیش‌فرض تیک نوتیفیکیشن همگانی بر روی false و ذخیره در localStorage تا لغو آن کلاً باقی بماند
-  const [sendBroadcastNotification, setSendBroadcastNotification] = useState<boolean>(() => {
-    const saved = localStorage.getItem('tech_admin_broadcast_notification');
-    return saved !== null ? saved === 'true' : false;
-  });
+  // وضعیت نمایش سراسری پیام در صندوق پیام‌های تمام کاربران
+  const [showDownloadNotice, setShowDownloadNotice] = useState<boolean>(true);
+  const [noticeTitle, setNoticeTitle] = useState('📱 نسخه جدید اپلیکیشن اندروید تهذیب منتشر شد');
+  const [noticeContent, setNoticeContent] = useState('');
+  const [isSavingNoticeSettings, setIsSavingNoticeSettings] = useState(false);
+  const [noticeSuccessMsg, setNoticeSuccessMsg] = useState('');
+
   const [forceUpdate, setForceUpdate] = useState(false);
 
   // مرجع به اینپوت انتخاب فایل جهت فراخوانی مطمئن در اندروید و وب
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const handleBroadcastNotificationChange = (checked: boolean) => {
-    setSendBroadcastNotification(checked);
-    localStorage.setItem('tech_admin_broadcast_notification', String(checked));
-  };
 
   const handleDropzoneClick = () => {
     if (fileInputRef.current) {
@@ -82,12 +86,71 @@ export function TechAdminLiveUpdateManager() {
           setApkInfo(data);
           if (data.version) setVersion(data.version);
           if (data.releaseNotes) setReleaseNotes(data.releaseNotes);
+          if (data.showDownloadNotice !== undefined) {
+            setShowDownloadNotice(Boolean(data.showDownloadNotice));
+          }
+          if (data.noticeTitle) {
+            setNoticeTitle(data.noticeTitle);
+          }
+          if (data.noticeContent !== undefined) {
+            setNoticeContent(data.noticeContent);
+          }
         }
       }
     } catch (err: any) {
       console.warn('Could not fetch APK info from server:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ذخیره دائمی وضعیت نمایش پیام در سرور برای کلیه کاربران
+  const handleSaveNoticeSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingNoticeSettings(true);
+    setNoticeSuccessMsg('');
+    setErrorMsg('');
+    try {
+      const res = await fetch(getApiUrl('/api/apk/notice-settings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          showDownloadNotice,
+          noticeTitle: noticeTitle.trim(),
+          noticeContent: noticeContent.trim(),
+          version: version.trim(),
+          releaseNotes: releaseNotes.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (showDownloadNotice) {
+          await syncApkNoticeForAllUsers({
+            success: true,
+            showDownloadNotice: true,
+            version: version.trim(),
+            releaseNotes: releaseNotes.trim(),
+            noticeTitle: noticeTitle.trim(),
+            noticeContent: noticeContent.trim()
+          });
+        } else {
+          await removeApkNoticeForAllUsers();
+        }
+        triggerSync();
+        setNoticeSuccessMsg(
+          showDownloadNotice
+            ? '✅ تنظیم ذخیره شد: نمایش پیام دانلود APK هم‌اکنون برای تمام کاربران (از جمله کاربران جدیدالورود) فعال گردید.'
+            : '✅ تنظیم ذخیره شد: پیام دانلود APK برای تمام کاربران غیرفعال و از صندوق پیام‌ها حذف گردید.'
+        );
+        setTimeout(() => setNoticeSuccessMsg(''), 6000);
+        fetchApkInfo();
+      } else {
+        setErrorMsg(data.message || 'خطا در ذخیره تنظیمات');
+      }
+    } catch (err: any) {
+      setErrorMsg('خطا در برقراری ارتباط با سرور: ' + err.message);
+    } finally {
+      setIsSavingNoticeSettings(false);
     }
   };
 
@@ -147,7 +210,10 @@ export function TechAdminLiveUpdateManager() {
           content: contentBase64,
           version: version.trim(),
           releaseNotes: releaseNotes.trim(),
-          forceUpdate
+          forceUpdate,
+          showDownloadNotice,
+          noticeTitle: noticeTitle.trim(),
+          noticeContent: noticeContent.trim()
         })
       });
 
@@ -155,10 +221,20 @@ export function TechAdminLiveUpdateManager() {
       const data = await res.json();
 
       if (data.success) {
-        // Broadcast in-app message to all students & users if enabled
-        if (sendBroadcastNotification) {
-          await broadcastUpdateNotificationToAllUsers(version.trim(), releaseNotes.trim());
+        // Broadcast or purge in-app APK notice for all users based on showDownloadNotice
+        if (showDownloadNotice) {
+          await syncApkNoticeForAllUsers({
+            success: true,
+            showDownloadNotice: true,
+            version: version.trim(),
+            releaseNotes: releaseNotes.trim(),
+            noticeTitle: noticeTitle.trim(),
+            noticeContent: noticeContent.trim()
+          });
+        } else {
+          await removeApkNoticeForAllUsers();
         }
+        triggerSync();
 
         setUploadProgress(100);
         setSuccessMsg(data.message || 'فایل APK با موفقیت روی سرور منتشر و پیام اطلاع‌رسانی ارسال گردید.');
@@ -253,7 +329,7 @@ export function TechAdminLiveUpdateManager() {
         </div>
 
         {/* Info Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
           <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
             <span className="text-[10px] text-slate-400 block">نسخه مستقر در سرور</span>
             <span className="text-xs font-black text-indigo-300 mt-1 block">
@@ -274,17 +350,178 @@ export function TechAdminLiveUpdateManager() {
               {apkInfo?.hasApk ? (
                 <>
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>فایل APK روی سرور آماده دانلود است</span>
+                  <span>فایل APK آماده دانلود است</span>
                 </>
               ) : (
                 <>
                   <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>نیازمند بارگذاری فایل اولیه APK</span>
+                  <span>نیازمند بارگذاری اولیه APK</span>
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
+            <span className="text-[10px] text-slate-400 block">نمایش پیام به کاربران</span>
+            <span className={`text-xs font-black mt-1 flex items-center gap-1.5 ${showDownloadNotice ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {showDownloadNotice ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>فعال (نمایش برای همه)</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+                  <span>غیرفعال (مخفی برای همه)</span>
                 </>
               )}
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Persistent Notification Settings Card */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+              <Megaphone className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>تنظیم وضعیت نمایش پیام دانلود APK در صندوق پیام‌های کاربران</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  showDownloadNotice
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                }`}>
+                  {showDownloadNotice ? 'هم‌اکنون فعال و در حال نمایش' : 'هم‌اکنون غیرفعال و مخفی'}
+                </span>
+              </h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                کنترل دائمی پیام نصب نسخه APK؛ این تنظیم برای تمام کاربران (از جمله کاربرانی که تازه ثبت‌نام می‌کنند) اعمال می‌شود.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveNoticeSettings} className="space-y-4">
+          {/* Two Distinct Mode Selectors: Show vs Hide */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Mode 1: SHOW */}
+            <div 
+              onClick={() => setShowDownloadNotice(true)}
+              className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                showDownloadNotice
+                  ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-500 text-emerald-900 dark:text-emerald-100 shadow-sm ring-2 ring-emerald-500/20'
+                  : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 opacity-70 hover:opacity-100'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="downloadNoticeMode"
+                  checked={showDownloadNotice === true}
+                  onChange={() => setShowDownloadNotice(true)}
+                  className="w-4 h-4 text-emerald-600 mt-1 cursor-pointer shrink-0"
+                />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Eye className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs sm:text-sm font-black block">
+                      نمایش پیام برای همه کاربران (فعال)
+                    </span>
+                  </div>
+                  <span className="text-[11px] block leading-relaxed">
+                    مادامی که این حالت فعال باشد، پیام همراه با دکمه سبز دانلود APK در صندوق مکاتبات تمامی کاربران (حتی کسانی که به تازگی وارد برنامه می‌شوند) نمایش داده می‌شود.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Mode 2: HIDE */}
+            <div 
+              onClick={() => setShowDownloadNotice(false)}
+              className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                !showDownloadNotice
+                  ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-500 text-rose-900 dark:text-rose-100 shadow-sm ring-2 ring-rose-500/20'
+                  : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 opacity-70 hover:opacity-100'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="downloadNoticeMode"
+                  checked={showDownloadNotice === false}
+                  onChange={() => setShowDownloadNotice(false)}
+                  className="w-4 h-4 text-rose-600 mt-1 cursor-pointer shrink-0"
+                />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <EyeOff className="w-4 h-4 text-rose-600" />
+                    <span className="text-xs sm:text-sm font-black block">
+                      عدم نمایش پیام (غیرفعال و مخفی)
+                    </span>
+                  </div>
+                  <span className="text-[11px] block leading-relaxed">
+                    پیام دانلود APK برای تمامی کاربران مدرسه حذف و مخفی می‌شود و برای هیچ کاربری (قدیمی یا جدیدالورود) نمایش داده نخواهد شد.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">عنوان پیام در صندوق مکاتبات</label>
+              <input
+                type="text"
+                value={noticeTitle}
+                onChange={e => setNoticeTitle(e.target.value)}
+                placeholder="📱 نسخه جدید اپلیکیشن اندروید تهذیب منتشر شد"
+                className="w-full px-3 py-2.5 text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500"
+              />
+            </div>
+            
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">متن اختصاصی پیام (اختیاری - در صورت خالی بودن از توضیحات نسخه استفاده می‌شود)</label>
+              <input
+                type="text"
+                value={noticeContent}
+                onChange={e => setNoticeContent(e.target.value)}
+                placeholder="توضیحات کوتاه یا راهنمایی برای نصب..."
+                className="w-full px-3 py-2.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={isSavingNoticeSettings}
+              className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-50"
+            >
+              {isSavingNoticeSettings ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>در حال ذخیره در سرور...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>ذخیره تنظیمات نمایش پیام</span>
+                </>
+              )}
+            </button>
+
+            {noticeSuccessMsg && (
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{noticeSuccessMsg}</span>
+              </span>
+            )}
+          </div>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -385,8 +622,8 @@ export function TechAdminLiveUpdateManager() {
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={sendBroadcastNotification}
-                  onChange={e => handleBroadcastNotificationChange(e.target.checked)}
+                  checked={showDownloadNotice}
+                  onChange={e => setShowDownloadNotice(e.target.checked)}
                   className="w-4 h-4 text-indigo-600 rounded-md focus:ring-0 cursor-pointer"
                 />
                 <div>
@@ -394,7 +631,7 @@ export function TechAdminLiveUpdateManager() {
                     ارسال خودکار پیام نوتیفیکیشن همراه با لینک دانلود به تمام طلاب و اساتید
                   </span>
                   <span className="text-[10px] text-slate-500">
-                    با فعال بودن این گزینه، بلافاصله پس از آپلود، یک پیام به صندوق پیام‌های تمام کاربران ارسال می‌شود.
+                    با فعال بودن این گزینه، بلافاصله پس از آپلود، پیام دانلود برای تمام کاربران فعال و ارسال می‌شود.
                   </span>
                 </div>
               </label>

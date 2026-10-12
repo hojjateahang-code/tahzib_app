@@ -13,6 +13,7 @@ import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
 import { getApiUrl, getAbsoluteApiUrl } from '../../lib/apiConfig';
 import { triggerApkDownload } from '../../lib/downloadHelper';
+import { syncApkNoticeForUser, isApkDownloadMessage, getCachedApkNoticeStatus } from '../../utils/apkNoticeSync';
 
 const ROLE_LABELS: Record<Role, string> = {
   DIRECTOR: 'مدیر مدرسه',
@@ -106,16 +107,31 @@ export function MessagingCenter() {
     [currentUser?.id]
   );
 
+  // Ensure APK notice state is synchronized whenever messaging center is viewed
+  useEffect(() => {
+    if (currentUser) {
+      syncApkNoticeForUser(currentUser).catch(() => null);
+    }
+  }, [currentUser?.id]);
+
   // Fetch messages involving current user
   const myMessages = useLiveQuery(
     async () => {
       if (!currentUser) return [];
       const msgs = await db.messages.toArray();
-      return msgs.filter(m => 
-        m.senderId === currentUser.id || 
-        m.recipientId === currentUser.id || 
-        (m.ccUserIds && m.ccUserIds.includes(currentUser.id))
-      ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const noticeDisabled = getCachedApkNoticeStatus() === false;
+
+      return msgs.filter(m => {
+        // If APK notice is disabled in update settings, hide it immediately
+        if (noticeDisabled && isApkDownloadMessage(m)) {
+          return false;
+        }
+        return (
+          m.senderId === currentUser.id || 
+          m.recipientId === currentUser.id || 
+          (m.ccUserIds && m.ccUserIds.includes(currentUser.id))
+        );
+      }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     },
     [currentUser?.id]
   );

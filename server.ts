@@ -605,7 +605,10 @@ app.get("/api/apk/info", (req, res) => {
     const updateJsonPath = path.join(UPDATES_DIR, "update.json");
     let info = {
       version: "1.0.0",
-      releaseNotes: "نسخه رسمی برنامه تهذیب حوزه علمیه",
+      releaseNotes: "نسخه رسمی و هوشمند اپلیکیشن اندروید سامانه جامع تهذیب حوزه علمیه",
+      showDownloadNotice: true,
+      noticeTitle: "📱 نسخه جدید اپلیکیشن اندروید تهذیب منتشر شد",
+      noticeContent: "",
       updatedAt: new Date().toISOString(),
       forceUpdate: false,
       fileSizeMb: 0,
@@ -639,10 +642,74 @@ app.get("/api/apk/info", (req, res) => {
   }
 });
 
+// POST Route: Save persistent APK Notice settings (Show/Hide message for all new & old users)
+app.post("/api/apk/notice-settings", (req, res) => {
+  try {
+    const { showDownloadNotice, noticeTitle, noticeContent, version, releaseNotes } = req.body;
+    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
+    let config: any = {
+      version: version || "1.0.0",
+      releaseNotes: releaseNotes || "نسخه رسمی و هوشمند اپلیکیشن اندروید سامانه جامع تهذیب حوزه علمیه",
+      showDownloadNotice: true,
+      noticeTitle: noticeTitle || "📱 نسخه جدید اپلیکیشن اندروید تهذیب منتشر شد",
+      noticeContent: noticeContent || "",
+      apkKey: "updates/tahzib-app.apk",
+      forceUpdate: false,
+      hasApk: fs.existsSync(APK_PATH),
+      downloadUrl: "/download/tahzib.apk",
+      updatedAt: new Date().toISOString()
+    };
+
+    if (fs.existsSync(updateJsonPath)) {
+      try {
+        const str = fs.readFileSync(updateJsonPath, "utf-8");
+        config = { ...config, ...JSON.parse(str) };
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (showDownloadNotice !== undefined) {
+      config.showDownloadNotice = Boolean(showDownloadNotice);
+    }
+    if (noticeTitle !== undefined) {
+      config.noticeTitle = String(noticeTitle).trim();
+    }
+    if (noticeContent !== undefined) {
+      config.noticeContent = String(noticeContent).trim();
+    }
+    if (version !== undefined && String(version).trim()) {
+      config.version = String(version).trim();
+    }
+    if (releaseNotes !== undefined && String(releaseNotes).trim()) {
+      config.releaseNotes = String(releaseNotes).trim();
+    }
+    config.updatedAt = new Date().toISOString();
+
+    if (!fs.existsSync(UPDATES_DIR)) {
+      fs.mkdirSync(UPDATES_DIR, { recursive: true });
+    }
+    fs.writeFileSync(updateJsonPath, JSON.stringify(config, null, 2), "utf-8");
+
+    return res.json({
+      success: true,
+      message: config.showDownloadNotice
+        ? "نمایش پیام دانلود APK برای تمام کاربران فعال گردید."
+        : "نمایش پیام دانلود APK برای تمام کاربران غیرفعال گردید.",
+      ...config
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: `خطا در ذخیره تنظیمات پیام: ${error.message}`
+    });
+  }
+});
+
 // POST Route: Upload APK directly from Tech Admin Panel
 app.post("/api/apk/upload", async (req, res) => {
   try {
-    const { name, content, version, releaseNotes, forceUpdate } = req.body;
+    const { name, content, version, releaseNotes, forceUpdate, showDownloadNotice, noticeTitle, noticeContent } = req.body;
     if (!content) {
       return res.status(400).json({ success: false, message: "محتوای فایل APK ارسال نشده است." });
     }
@@ -667,19 +734,31 @@ app.post("/api/apk/upload", async (req, res) => {
     const finalVersion = version || "1.0.0";
     const finalNotes = releaseNotes || "نسخه جدید اپلیکیشن اندروید سامانه تهذیب";
 
+    // Read existing config if present
+    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
+    let existingConfig: any = {};
+    if (fs.existsSync(updateJsonPath)) {
+      try {
+        existingConfig = JSON.parse(fs.readFileSync(updateJsonPath, "utf-8"));
+      } catch (e) {}
+    }
+
     // Update metadata update.json
     const updateConfig = {
+      ...existingConfig,
       version: finalVersion,
       releaseNotes: finalNotes,
       apkKey: "updates/tahzib-app.apk",
       forceUpdate: Boolean(forceUpdate),
+      showDownloadNotice: showDownloadNotice !== undefined ? Boolean(showDownloadNotice) : (existingConfig.showDownloadNotice !== undefined ? existingConfig.showDownloadNotice : true),
+      noticeTitle: noticeTitle !== undefined ? String(noticeTitle).trim() : (existingConfig.noticeTitle || `📱 نسخه جدید اپلیکیشن اندروید تهذیب (نسخه ${finalVersion}) منتشر شد`),
+      noticeContent: noticeContent !== undefined ? String(noticeContent).trim() : (existingConfig.noticeContent || ""),
       fileSizeMb,
       hasApk: true,
       downloadUrl: "/download/tahzib.apk",
       updatedAt: new Date().toISOString()
     };
 
-    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
     fs.writeFileSync(updateJsonPath, JSON.stringify(updateConfig, null, 2), "utf-8");
 
     return res.json({
@@ -687,7 +766,8 @@ app.post("/api/apk/upload", async (req, res) => {
       message: `فایل APK نسخه ${finalVersion} با حجم ${fileSizeMb} مگابایت با موفقیت در سرور مستقر گردید.`,
       downloadUrl: "/download/tahzib.apk",
       fileSizeMb,
-      version: finalVersion
+      version: finalVersion,
+      showDownloadNotice: updateConfig.showDownloadNotice
     });
   } catch (error: any) {
     console.error("APK Upload Error:", error);

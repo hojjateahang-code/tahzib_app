@@ -12,6 +12,7 @@ import { NotificationCenter } from './components/notifications/NotificationCente
 import { MinioSyncModal } from './components/sync/MinioSyncModal';
 import { LiveUpdateChecker } from './components/common/LiveUpdateChecker';
 import { syncMinIOData } from './sync';
+import { syncApkNoticeForUser } from './utils/apkNoticeSync';
 
 const COLORS = [
   { id: 'indigo', label: 'نیلی (اصلی)', hex: '#4f46e5' },
@@ -43,9 +44,12 @@ export default function App() {
     document.documentElement.setAttribute('data-color', themeColor);
   }, [themeColor]);
 
-  // Automatic Background Cloud Sync across all devices
+  // Automatic Background Cloud Sync and APK Notice check across all devices
   useEffect(() => {
     syncMinIOData().catch(() => null);
+    if (currentUser) {
+      syncApkNoticeForUser(currentUser).catch(() => null);
+    }
 
     const interval = setInterval(() => {
       syncMinIOData().catch(() => null);
@@ -53,6 +57,9 @@ export default function App() {
 
     const handleReactivate = () => {
       syncMinIOData().catch(() => null);
+      if (currentUser) {
+        syncApkNoticeForUser(currentUser).catch(() => null);
+      }
     };
 
     const handleVisibility = () => {

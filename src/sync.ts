@@ -3,6 +3,7 @@ import { db } from './db';
 import type { BaseEntity } from './types';
 import { logger } from './lib/logger';
 import { getApiUrl } from './lib/apiConfig';
+import { syncApkNoticeForAllUsers } from './utils/apkNoticeSync';
 
 let syncTimeout: any = null;
 
@@ -267,6 +268,9 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     if (localPrivateNotes.length > 0) await db.privateNotes.bulkPut(localPrivateNotes);
     if (localTahzibPrograms.length > 0) await db.tahzibPrograms.bulkPut(localTahzibPrograms);
     if (localTahzibCategories.length > 0) await db.tahzibCategories.bulkPut(localTahzibCategories);
+
+    // Apply persistent APK notice state (create for all or purge for all based on server settings)
+    await syncApkNoticeForAllUsers().catch(() => null);
 
     // 5. PUSH: Upload updated consensus dataset to Storage under client device key + latest.json
     const deviceId = getDeviceId();

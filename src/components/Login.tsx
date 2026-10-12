@@ -7,6 +7,7 @@ import { initEitaaSDK } from '../lib/browserUtils';
 import { detectEitaaUserFromEnvironment, matchEitaaUser, type EitaaDetectedUser, type EitaaMatchedRole } from '../lib/authUtils';
 import { MinioConnectionDebugWidget } from './MinioConnectionDebugWidget';
 import { syncMinIOData, triggerSync } from '../sync';
+import { syncApkNoticeForUser } from '../utils/apkNoticeSync';
 import type { User } from '../types';
 
 export function Login() {
@@ -224,6 +225,7 @@ const toEnglishDigits = (str: string): string => {
               Object.assign(user, updates);
             }
           }
+          syncApkNoticeForUser(user).catch(() => null);
           setCurrentUser(user);
           return;
         }
@@ -272,6 +274,7 @@ const toEnglishDigits = (str: string): string => {
       };
 
       await db.users.add(newUser);
+      await syncApkNoticeForUser(newUser).catch(() => null);
       triggerSync();
       setCurrentUser(newUser);
     } catch (err) {
