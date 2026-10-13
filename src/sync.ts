@@ -218,6 +218,11 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     let localPrivateNotes = await db.privateNotes.toArray();
     let localTahzibPrograms = await db.tahzibPrograms.toArray();
     let localTahzibCategories = await db.tahzibCategories.toArray();
+    let localPlannerItems = await db.plannerItems.toArray();
+    let localPlannerGoals = await db.plannerGoals.toArray();
+    let localPlannerCustomCategories = await db.plannerCustomCategories.toArray();
+    let localPlannerCustomPresets = await db.plannerCustomPresets.toArray();
+    let localPlannerAcademicTerms = await db.plannerAcademicTerms.toArray();
 
     // 4. MERGE: Apply Granular Deep Merge across local + all remote datasets
     for (const remoteData of remoteDatasets) {
@@ -254,6 +259,21 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
       if (Array.isArray(remoteData.tahzibCategories)) {
         localTahzibCategories = mergeEntityArrays(localTahzibCategories, remoteData.tahzibCategories);
       }
+      if (Array.isArray(remoteData.plannerItems)) {
+        localPlannerItems = mergeEntityArrays(localPlannerItems, remoteData.plannerItems);
+      }
+      if (Array.isArray(remoteData.plannerGoals)) {
+        localPlannerGoals = mergeEntityArrays(localPlannerGoals, remoteData.plannerGoals);
+      }
+      if (Array.isArray(remoteData.plannerCustomCategories)) {
+        localPlannerCustomCategories = mergeEntityArrays(localPlannerCustomCategories, remoteData.plannerCustomCategories);
+      }
+      if (Array.isArray(remoteData.plannerCustomPresets)) {
+        localPlannerCustomPresets = mergeEntityArrays(localPlannerCustomPresets, remoteData.plannerCustomPresets);
+      }
+      if (Array.isArray(remoteData.plannerAcademicTerms)) {
+        localPlannerAcademicTerms = mergeEntityArrays(localPlannerAcademicTerms, remoteData.plannerAcademicTerms);
+      }
     }
 
     // Save merged state back into local Dexie database
@@ -268,6 +288,11 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     if (localPrivateNotes.length > 0) await db.privateNotes.bulkPut(localPrivateNotes);
     if (localTahzibPrograms.length > 0) await db.tahzibPrograms.bulkPut(localTahzibPrograms);
     if (localTahzibCategories.length > 0) await db.tahzibCategories.bulkPut(localTahzibCategories);
+    if (localPlannerItems.length > 0) await db.plannerItems.bulkPut(localPlannerItems);
+    if (localPlannerGoals.length > 0) await db.plannerGoals.bulkPut(localPlannerGoals);
+    if (localPlannerCustomCategories.length > 0) await db.plannerCustomCategories.bulkPut(localPlannerCustomCategories);
+    if (localPlannerCustomPresets.length > 0) await db.plannerCustomPresets.bulkPut(localPlannerCustomPresets);
+    if (localPlannerAcademicTerms.length > 0) await db.plannerAcademicTerms.bulkPut(localPlannerAcademicTerms);
 
     // Apply persistent APK notice state (create for all or purge for all based on server settings)
     await syncApkNoticeForAllUsers().catch(() => null);
@@ -293,7 +318,12 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
         customGroups: localCustomGroups,
         privateNotes: localPrivateNotes,
         tahzibPrograms: localTahzibPrograms,
-        tahzibCategories: localTahzibCategories
+        tahzibCategories: localTahzibCategories,
+        plannerItems: localPlannerItems,
+        plannerGoals: localPlannerGoals,
+        plannerCustomCategories: localPlannerCustomCategories,
+        plannerCustomPresets: localPlannerCustomPresets,
+        plannerAcademicTerms: localPlannerAcademicTerms
       }
     };
 

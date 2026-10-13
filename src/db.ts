@@ -2,7 +2,8 @@ import Dexie, { type Table } from 'dexie';
 import type { 
   User, Task, Assessment, PrivateNote, Report, PersonalHabit, 
   Appointment, Message, CustomGroup, TahzibProgram, TahzibCategory,
-  TahzibCourse, StudentCourseEnrollment 
+  TahzibCourse, StudentCourseEnrollment, PlannerItem, PlannerGoal,
+  PlannerCustomCategory, PlannerCustomPreset, PlannerAcademicTerm 
 } from './types';
 
 export class SeminaryDB extends Dexie {
@@ -19,6 +20,11 @@ export class SeminaryDB extends Dexie {
   tahzibCategories!: Table<TahzibCategory, string>;
   tahzibCourses!: Table<TahzibCourse, string>;
   studentCourseEnrollments!: Table<StudentCourseEnrollment, string>;
+  plannerItems!: Table<PlannerItem, string>;
+  plannerGoals!: Table<PlannerGoal, string>;
+  plannerCustomCategories!: Table<PlannerCustomCategory, string>;
+  plannerCustomPresets!: Table<PlannerCustomPreset, string>;
+  plannerAcademicTerms!: Table<PlannerAcademicTerm, string>;
 
   constructor() {
     super('SeminaryDB');
@@ -144,6 +150,65 @@ export class SeminaryDB extends Dexie {
       tahzibCategories: 'id, name',
       tahzibCourses: 'id, isActive, startDate, endDate',
       studentCourseEnrollments: 'id, courseId, studentId, status, synced'
+    });
+
+    this.version(13).stores({
+      users: 'id, role, username, nationalId, base',
+      tasks: 'id, roleTarget, assignedTo, date, isCompleted',
+      personalHabits: 'id, studentId',
+      assessments: 'id, studentId, date, synced',
+      privateNotes: 'id, studentId, date',
+      reports: 'id, authorId, studentId, type, date, synced',
+      appointments: 'id, studentId, counselorId, date, status',
+      messages: 'id, senderId, recipientId, type, date, isRead',
+      customGroups: 'id, ownerId, name',
+      tahzibPrograms: 'id, category, isActive',
+      tahzibCategories: 'id, name',
+      tahzibCourses: 'id, isActive, startDate, endDate',
+      studentCourseEnrollments: 'id, courseId, studentId, status, synced',
+      plannerItems: 'id, studentId, date, category, isCompleted, isRecurringWeekly',
+      plannerGoals: 'id, studentId, year, category, isCompleted'
+    });
+
+    this.version(14).stores({
+      users: 'id, role, username, nationalId, base',
+      tasks: 'id, roleTarget, assignedTo, date, isCompleted',
+      personalHabits: 'id, studentId',
+      assessments: 'id, studentId, date, synced',
+      privateNotes: 'id, studentId, date',
+      reports: 'id, authorId, studentId, type, date, synced',
+      appointments: 'id, studentId, counselorId, date, status',
+      messages: 'id, senderId, recipientId, type, date, isRead',
+      customGroups: 'id, ownerId, name',
+      tahzibPrograms: 'id, category, isActive',
+      tahzibCategories: 'id, name',
+      tahzibCourses: 'id, isActive, startDate, endDate',
+      studentCourseEnrollments: 'id, courseId, studentId, status, synced',
+      plannerItems: 'id, studentId, date, category, status, isCompleted, isRecurringWeekly',
+      plannerGoals: 'id, studentId, year, category, isCompleted',
+      plannerCustomCategories: 'id, studentId, name',
+      plannerCustomPresets: 'id, studentId, title, category'
+    });
+
+    this.version(15).stores({
+      users: 'id, role, username, nationalId, base',
+      tasks: 'id, roleTarget, assignedTo, date, isCompleted',
+      personalHabits: 'id, studentId',
+      assessments: 'id, studentId, date, synced',
+      privateNotes: 'id, studentId, date',
+      reports: 'id, authorId, studentId, type, date, synced',
+      appointments: 'id, studentId, counselorId, date, status',
+      messages: 'id, senderId, recipientId, type, date, isRead',
+      customGroups: 'id, ownerId, name',
+      tahzibPrograms: 'id, category, isActive',
+      tahzibCategories: 'id, name',
+      tahzibCourses: 'id, isActive, startDate, endDate',
+      studentCourseEnrollments: 'id, courseId, studentId, status, synced',
+      plannerItems: 'id, studentId, date, category, status, isCompleted, isRecurringWeekly',
+      plannerGoals: 'id, studentId, year, category, isCompleted',
+      plannerCustomCategories: 'id, studentId, name',
+      plannerCustomPresets: 'id, studentId, title, category',
+      plannerAcademicTerms: 'id, studentId, year, name'
     });
   }
 }

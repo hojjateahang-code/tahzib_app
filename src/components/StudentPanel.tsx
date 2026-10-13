@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { CheckCircle, Lock, BarChart2, User as UserIcon, Calendar, Mail, Smartphone, Trophy } from 'lucide-react';
+import { CheckCircle, Lock, BarChart2, User as UserIcon, Calendar, Mail, Smartphone, Trophy, CalendarClock } from 'lucide-react';
 import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../utils/assessmentUtils';
+import { getPersianDayOfWeek } from '../utils/shamsiCalendar';
 import { StudentSelfAssessment } from './student/StudentSelfAssessment';
 import { StudentProgressChart } from './student/StudentProgressChart';
 import { StudentScreenTimeChart } from './student/StudentScreenTimeChart';
@@ -13,11 +14,12 @@ import { MessagingCenter } from './messaging/MessagingCenter';
 import { StudentLeaderboardView } from './leaderboard/StudentLeaderboardView';
 import { StudentCourseBanner } from './student/StudentCourseBanner';
 import { StudentCoursesView } from './student/StudentCoursesView';
+import { StudentPlannerView } from './planner/StudentPlannerView';
 import { GraduationCap } from 'lucide-react';
 
 export function StudentPanel() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'COURSES' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
+  const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'PLANNER' | 'COURSES' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -68,7 +70,28 @@ export function StudentPanel() {
     [currentUser?.id, currentUser?.base]
   );
 
+  // Live query for today's active planner tasks
+  const todayPlannerCount = useLiveQuery(
+    async () => {
+      if (!currentUser?.id) return 0;
+      const todayStr = getTodayDateStr();
+      const all = await db.plannerItems.toArray();
+      const currentDow = getPersianDayOfWeek(new Date());
+      const todayTasks = all.filter(item => 
+        item.studentId === currentUser.id && 
+        !item.isDeleted && 
+        !item.isCompleted &&
+        (item.date === todayStr || (item.isRecurringWeekly && item.recurringDays?.includes(currentDow)))
+      );
+      return todayTasks.length;
+    },
+    [currentUser?.id]
+  );
+
   const getBadge = (tabId: string) => {
+    if (tabId === 'PLANNER' && todayPlannerCount && todayPlannerCount > 0) {
+      return todayPlannerCount;
+    }
     if (tabId === 'MESSAGES' && unreadMessagesCount && unreadMessagesCount > 0) {
       return unreadMessagesCount;
     }
@@ -83,6 +106,7 @@ export function StudentPanel() {
 
   const tabs = [
     { id: 'ASSESSMENT', label: 'ارزیابی', icon: CheckCircle },
+    { id: 'PLANNER', label: 'برنامه‌ریزی شخصی', icon: CalendarClock },
     { id: 'COURSES', label: 'دوره‌ها و کارگاه‌ها', icon: GraduationCap },
     { id: 'LEADERBOARD', label: 'امتیازات و رتبه', icon: Trophy },
     { id: 'CHART', label: 'آمار', icon: BarChart2 },
@@ -146,6 +170,7 @@ export function StudentPanel() {
       {/* Content Area */}
       <div className="flex-1">
         {activeTab === 'ASSESSMENT' && <StudentSelfAssessment />}
+        {activeTab === 'PLANNER' && <StudentPlannerView />}
         {activeTab === 'COURSES' && <StudentCoursesView />}
         {activeTab === 'LEADERBOARD' && <StudentLeaderboardView />}
         {activeTab === 'CHART' && <StudentProgressChart />}

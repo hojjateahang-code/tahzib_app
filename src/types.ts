@@ -236,3 +236,143 @@ export interface Message extends BaseEntity {
   synced?: boolean;
 }
 
+export type PlannerCategory = 
+  | 'CLASS'       // کلاس درس و تدریس حوزه
+  | 'MABAHESE'    // مباحثه علمی
+  | 'STUDY'       // مطالعه و پیش‌مطالعه و پژوهش
+  | 'WORSHIP'     // عبادی، نماز جماعت، تهجد، ادعیه
+  | 'TABLIGH'     // تبلیغ، منبر، هیئت، فعالیت فرهنگی
+  | 'PERSONAL'    // امور شخصی و خانوادگی
+  | 'EXAM'        // امتحان و آزمون حوزه
+  | 'FITNESS'     // ورزش و سلامتی
+  | 'CUSTOM'      // دسته‌بندی سفارشی اضافه شده توسط طلبه
+  | 'OTHER';      // سایر فعالیت‌ها
+
+export type PlannerPriority = 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW';
+
+export type PlannerItemStatus = 
+  | 'PENDING'      // در انتظار انجام
+  | 'DONE'         // انجام شد
+  | 'MISSED'       // انجام نشد (عدم حضور طلبه)
+  | 'HOLIDAY'      // تعطیل بود (تعطیلی حوزه / مناسبت)
+  | 'CANCELLED'    // لغو شد (کلاس یا برنامه برگزار نشد)
+  | 'POSTPONED';   // موکول به بعد
+
+export interface PlannerCustomCategory extends BaseEntity {
+  id: string;
+  studentId: string;
+  name: string;
+  color?: string;
+  synced?: boolean;
+  createdAt?: string;
+}
+
+export interface PlannerCustomPreset extends BaseEntity {
+  id: string;
+  studentId: string;
+  title: string;
+  category: PlannerCategory;
+  customCategoryName?: string;
+  duration?: number; // minutes
+  startTime?: string;
+  endTime?: string;
+  subject?: string;
+  location?: string;
+  instructor?: string;
+  notes?: string;
+  synced?: boolean;
+  createdAt?: string;
+}
+
+export interface PlannerItem extends BaseEntity {
+  id: string;
+  studentId: string;
+  title: string;
+  description?: string;
+  category: PlannerCategory;
+  customCategoryName?: string; // نام دسته سفارشی دلخواه
+  priority?: PlannerPriority;
+  
+  // Date and Time (ISO format YYYY-MM-DD)
+  date: string;
+  startTime?: string; // "HH:mm" e.g. "07:30"
+  endTime?: string;   // "HH:mm" e.g. "09:00"
+  isAllDay?: boolean;
+  
+  // Recurring support (e.g. weekly recurring class / routine)
+  isRecurringWeekly?: boolean;
+  // 0: شنبه, 1: یکشنبه, 2: دوشنبه, 3: سه‌شنبه, 4: چهارشنبه, 5: پنج‌شنبه, 6: جمعه
+  recurringDays?: number[]; 
+  recurringWeeksCount?: number; // مدت زمان تکرار بر حسب هفته (مثلا تا ۱۰ هفته)
+  recurringStartDate?: string;  // تاریخ شروع تکرار (YYYY-MM-DD)
+  recurringEndDate?: string;    // تاریخ پایان تکرار (YYYY-MM-DD)
+  
+  // Seminary / Academic context
+  subjectName?: string;    // نام کتاب یا درس (مثلا مکاسب، کفایه، لمعه، اصول)
+  instructorName?: string; // نام استاد
+  location?: string;       // مکان (مدرس ۲، حجره، مسجد، کتابخانه)
+  partnerName?: string;    // هم‌بحث (در صورت مباحثه)
+
+  // Status and completion
+  isCompleted?: boolean;
+  completedAt?: string;
+  status?: PlannerItemStatus;     // وضعیت تفصیلی: انجام شد، نشد، تعطیل بود، لغو شد
+  statusReason?: string;          // توضیحات دلیل عدم انجام یا تعطیلی
+  
+  // Per-date status overrides for recurring weekly items (map date YYYY-MM-DD => { status, statusReason })
+  dateStatusOverrides?: Record<string, {
+    status: PlannerItemStatus;
+    statusReason?: string;
+    updatedAt?: string;
+  }>;
+
+  // Reminder in minutes before startTime (e.g. 0, 5, 15, 30, 60)
+  reminderMinutes?: number;
+  reminderDismissed?: boolean;
+  
+  // Visual styling
+  color?: string;
+  notes?: string;
+  synced?: boolean;
+  createdAt?: string;
+}
+
+export interface PlannerGoalMilestone {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
+export interface PlannerGoal extends BaseEntity {
+  id: string;
+  studentId: string;
+  year: number; // e.g. 1404 or 1405
+  season?: 'SPRING' | 'SUMMER' | 'FALL' | 'WINTER' | 'FULL_YEAR';
+  termId?: string; // شناسه نیمسال یا دوره آموزشی مرتبط
+  title: string;
+  description?: string;
+  category: PlannerCategory;
+  targetDate?: string;
+  progressPercent: number; // 0 - 100
+  isCompleted?: boolean;
+  milestones?: PlannerGoalMilestone[];
+  synced?: boolean;
+  createdAt?: string;
+}
+
+export interface PlannerAcademicTerm extends BaseEntity {
+  id: string;
+  studentId: string;
+  year?: number; // e.g. 1404
+  name: string; // عنوان نیمسال یا فصل، مثلاً "نیمسال اول تحصیلی حوزه (پاییز)"
+  tag?: string; // برچسب کوتاه شاخص، مثلاً "شروع کلاس‌ها و دروس پایه"
+  desc?: string; // شرح دوره و برنامه‌ها
+  months: string[]; // نام ماه‌های شمسی مثلا ['مهر', 'آبان', 'آذر']
+  startDate?: string; // تاریخ شروع (اختیاری)
+  endDate?: string;   // تاریخ پایان (اختیاری)
+  color?: string;     // کلاس رنگ یا گرادیان
+  keyEvents?: string[]; // رویدادها یا نقاط عطف کلیدی نیمسال
+  synced?: boolean;
+  createdAt?: string;
+}
+
