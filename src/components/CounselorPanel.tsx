@@ -7,6 +7,7 @@ import { CounselorReports } from './counselor/CounselorReports';
 import { CounselorStudents } from './counselor/CounselorStudents';
 import { UserProfile } from './UserProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
+import { isApkDownloadMessage, getCachedApkNoticeStatus, isApkNoticeReadByUser } from '../utils/apkNoticeSync';
 
 export function CounselorPanel() {
   const { currentUser } = useAuth();
@@ -36,10 +37,14 @@ export function CounselorPanel() {
     async () => {
       if (!currentUser) return 0;
       const msgs = await db.messages.toArray();
-      return msgs.filter(m => 
-        (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id))) && 
-        !m.isRead
-      ).length;
+      const noticeDisabled = getCachedApkNoticeStatus() === false;
+      return msgs.filter(m => {
+        if (m.isDeleted) return false;
+        if (noticeDisabled && isApkDownloadMessage(m)) return false;
+        if (isApkDownloadMessage(m) && isApkNoticeReadByUser(currentUser.id, m)) return false;
+        if (m.isRead || localStorage.getItem(`read_msg_${m.id}`) === 'true') return false;
+        return (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id)));
+      }).length;
     },
     [currentUser?.id]
   );

@@ -706,6 +706,61 @@ app.post("/api/apk/notice-settings", (req, res) => {
   }
 });
 
+// POST Route: Quick 1-click Toggle for APK Notice
+app.post("/api/apk/toggle-notice", (req, res) => {
+  try {
+    const updateJsonPath = path.join(UPDATES_DIR, "update.json");
+    let config: any = {
+      version: "1.0.0",
+      releaseNotes: "نسخه رسمی و هوشمند اپلیکیشن اندروید سامانه جامع تهذیب حوزه علمیه",
+      showDownloadNotice: true,
+      noticeTitle: "📱 نسخه جدید اپلیکیشن اندروید تهذیب منتشر شد",
+      noticeContent: "",
+      apkKey: "updates/tahzib-app.apk",
+      forceUpdate: false,
+      hasApk: fs.existsSync(APK_PATH),
+      downloadUrl: "/download/tahzib.apk",
+      updatedAt: new Date().toISOString()
+    };
+
+    if (fs.existsSync(updateJsonPath)) {
+      try {
+        const str = fs.readFileSync(updateJsonPath, "utf-8");
+        config = { ...config, ...JSON.parse(str) };
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const newStatus = req.body && typeof req.body.enabled === 'boolean'
+      ? req.body.enabled
+      : !config.showDownloadNotice;
+
+    config.showDownloadNotice = newStatus;
+    config.updatedAt = new Date().toISOString();
+
+    if (!fs.existsSync(UPDATES_DIR)) {
+      fs.mkdirSync(UPDATES_DIR, { recursive: true });
+    }
+    fs.writeFileSync(updateJsonPath, JSON.stringify(config, null, 2), "utf-8");
+
+    return res.json({
+      success: true,
+      showDownloadNotice: config.showDownloadNotice,
+      message: config.showDownloadNotice
+        ? "نمایش پیام دانلود APK برای تمام کاربران فعال گردید."
+        : "نمایش پیام دانلود APK برای تمام کاربران غیرفعال گردید.",
+      ...config
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: `خطا در تغییر وضعیت پیام: ${error.message}`
+    });
+  }
+});
+
+
 // POST Route: Upload APK directly from Tech Admin Panel
 app.post("/api/apk/upload", async (req, res) => {
   try {

@@ -3,7 +3,9 @@ import { db } from './db';
 import type { BaseEntity } from './types';
 import { logger } from './lib/logger';
 import { getApiUrl } from './lib/apiConfig';
-import { syncApkNoticeForAllUsers } from './utils/apkNoticeSync';
+import { syncApkNoticeForAllUsers, isApkDownloadMessage, getCachedApkNoticeStatus } from './utils/apkNoticeSync';
+
+
 
 let syncTimeout: any = null;
 
@@ -245,8 +247,19 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
         localAppointments = mergeEntityArrays(localAppointments, remoteData.appointments);
       }
       if (Array.isArray(remoteData.messages)) {
-        localMessages = mergeEntityArrays(localMessages, remoteData.messages);
+        const noticeDisabled = getCachedApkNoticeStatus() === false;
+        const sanitizedRemoteMessages = remoteData.messages.map((m: any) => {
+          if (noticeDisabled && isApkDownloadMessage(m)) {
+            return { ...m, isDeleted: true, isRead: true };
+          }
+          if (localStorage.getItem(`read_msg_${m.id}`) === 'true') {
+            return { ...m, isRead: true };
+          }
+          return m;
+        });
+        localMessages = mergeEntityArrays(localMessages, sanitizedRemoteMessages);
       }
+
       if (Array.isArray(remoteData.customGroups)) {
         localCustomGroups = mergeEntityArrays(localCustomGroups, remoteData.customGroups);
       }

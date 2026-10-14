@@ -23,8 +23,9 @@ import { CURRENT_VERSION } from '../common/LiveUpdateChecker';
 import { getApiUrl, getServerApiBaseUrl, setStoredServerUrl } from '../../lib/apiConfig';
 import { db } from '../../db';
 import { triggerSync } from '../../sync';
-import { syncApkNoticeForAllUsers, removeApkNoticeForAllUsers } from '../../utils/apkNoticeSync';
+import { syncApkNoticeForAllUsers, removeApkNoticeForAllUsers, toggleApkNoticeServer } from '../../utils/apkNoticeSync';
 import type { Message } from '../../types';
+
 
 interface ApkInfo {
   version: string;
@@ -151,6 +152,30 @@ export function TechAdminLiveUpdateManager() {
       setErrorMsg('خطا در برقراری ارتباط با سرور: ' + err.message);
     } finally {
       setIsSavingNoticeSettings(false);
+    }
+  };
+
+  // تغییر فوری و یک‌کلیکه وضعیت فعال/غیرفعال بودن پیام توسط مسئول فنی
+  const [isTogglingNotice, setIsTogglingNotice] = useState(false);
+  const handleQuickToggleNotice = async () => {
+    setIsTogglingNotice(true);
+    setErrorMsg('');
+    try {
+      const nextStatus = !showDownloadNotice;
+      const resStatus = await toggleApkNoticeServer(nextStatus);
+      setShowDownloadNotice(resStatus);
+      triggerSync();
+      setNoticeSuccessMsg(
+        resStatus
+          ? '✅ پیام دانلود نسخه جدید APK هم‌اکنون برای تمام کاربران فعال گردید.'
+          : '✅ پیام نسخه جدید غیرفعال شد و از صندوق مکاتبات تمام کاربران حذف گردید.'
+      );
+      setTimeout(() => setNoticeSuccessMsg(''), 6000);
+      fetchApkInfo();
+    } catch (err: any) {
+      setErrorMsg('خطا در تغییر وضعیت پیام: ' + (err?.message || err));
+    } finally {
+      setIsTogglingNotice(false);
     }
   };
 
@@ -361,21 +386,36 @@ export function TechAdminLiveUpdateManager() {
             </span>
           </div>
 
-          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
-            <span className="text-[10px] text-slate-400 block">نمایش پیام به کاربران</span>
-            <span className={`text-xs font-black mt-1 flex items-center gap-1.5 ${showDownloadNotice ? 'text-emerald-400' : 'text-slate-400'}`}>
-              {showDownloadNotice ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>فعال (نمایش برای همه)</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
-                  <span>غیرفعال (مخفی برای همه)</span>
-                </>
-              )}
-            </span>
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60 flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] text-slate-400 block">نمایش پیام به کاربران</span>
+              <span className={`text-xs font-black mt-1 flex items-center gap-1.5 ${showDownloadNotice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {showDownloadNotice ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>فعال (در حال نمایش)</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+                    <span>غیرفعال (مخفی برای همه)</span>
+                  </>
+                )}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleQuickToggleNotice}
+              disabled={isTogglingNotice}
+              className={`mt-2 w-full py-1.5 px-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                showDownloadNotice
+                  ? 'bg-rose-500/30 hover:bg-rose-500 text-rose-200 hover:text-white border border-rose-500/40'
+                  : 'bg-emerald-500/30 hover:bg-emerald-500 text-emerald-200 hover:text-white border border-emerald-500/40'
+              }`}
+            >
+              {isTogglingNotice ? <RefreshCw className="w-3 h-3 animate-spin" /> : showDownloadNotice ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              <span>{showDownloadNotice ? 'غیرفعال‌سازی سریع' : 'فعال‌سازی سریع'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -403,7 +443,28 @@ export function TechAdminLiveUpdateManager() {
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleQuickToggleNotice}
+            disabled={isTogglingNotice}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer shrink-0 disabled:opacity-50 ${
+              showDownloadNotice
+                ? 'bg-rose-500 hover:bg-rose-600 text-white'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+            }`}
+          >
+            {isTogglingNotice ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : showDownloadNotice ? (
+              <EyeOff className="w-3.5 h-3.5" />
+            ) : (
+              <Eye className="w-3.5 h-3.5" />
+            )}
+            <span>{showDownloadNotice ? 'غیرفعال‌سازی و حذف پیام از همه' : 'فعال‌سازی و ارسال به همه'}</span>
+          </button>
         </div>
+
 
         <form onSubmit={handleSaveNoticeSettings} className="space-y-4">
           {/* Two Distinct Mode Selectors: Show vs Hide */}

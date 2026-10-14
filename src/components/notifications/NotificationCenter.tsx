@@ -5,6 +5,7 @@ import { User } from '../../types';
 import { Bell, Mail, UserPlus, FileText, CheckSquare, AlertCircle, X, CheckCheck, Trash2, Eye } from 'lucide-react';
 import { triggerSync } from '../../sync';
 import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../../utils/assessmentUtils';
+import { isApkDownloadMessage, getCachedApkNoticeStatus, isApkNoticeReadByUser, markApkNoticeAsRead } from '../../utils/apkNoticeSync';
 
 interface Props {
   currentUser: User;
@@ -46,10 +47,14 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   const unreadMessages = useLiveQuery(
     async () => {
       const msgs = await db.messages.toArray();
-      return msgs.filter(m => 
-        (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id))) && 
-        !m.isRead
-      );
+      const noticeDisabled = getCachedApkNoticeStatus() === false;
+      return msgs.filter(m => {
+        if (m.isDeleted) return false;
+        if (noticeDisabled && isApkDownloadMessage(m)) return false;
+        if (isApkDownloadMessage(m) && isApkNoticeReadByUser(currentUser.id, m)) return false;
+        if (m.isRead || localStorage.getItem(`read_msg_${m.id}`) === 'true') return false;
+        return (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id)));
+      });
     },
     [currentUser.id]
   );
@@ -265,9 +270,11 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
     // Mark as dismissed locally
     setDismissedIds(prev => [...prev, notif.id]);
 
-    // If it's a message, mark as read in DB
+    // If it's a message, mark as read in DB and localStorage
     if (notif.type === 'MESSAGE' && notif.targetId) {
-      await db.messages.update(notif.targetId, { isRead: true });
+      await db.messages.update(notif.targetId, { isRead: true, updatedAt: Date.now() });
+      localStorage.setItem(`read_msg_${notif.targetId}`, 'true');
+      await markApkNoticeAsRead(currentUser.id, notif.targetId);
       triggerSync();
     }
   };
@@ -288,7 +295,11 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   const markAllAsRead = async () => {
     if (unreadMessages && unreadMessages.length > 0) {
       for (const m of unreadMessages) {
-        await db.messages.update(m.id, { isRead: true });
+        await db.messages.update(m.id, { isRead: true, updatedAt: Date.now() });
+        localStorage.setItem(`read_msg_${m.id}`, 'true');
+        if (isApkDownloadMessage(m)) {
+          await markApkNoticeAsRead(currentUser.id, m.id);
+        }
       }
       triggerSync();
     }
@@ -296,6 +307,7 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
     const allIds = notifications.map(n => n.id);
     setDismissedIds(prev => [...Array.from(new Set([...prev, ...allIds]))]);
   };
+
 
   return (
     <div className="relative">

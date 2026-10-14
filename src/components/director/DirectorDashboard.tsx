@@ -9,6 +9,7 @@ import { StudentEscalationAlerts } from '../supervisor/StudentEscalationAlerts';
 import { ReportContentDisplay } from '../common/ReportContentDisplay';
 import { getReportAuthorInfo } from '../../utils/reportUtils';
 import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../../utils/assessmentUtils';
+import { isApkDownloadMessage } from '../../utils/apkNoticeSync';
 
 interface DirectorDashboardProps {
   onNavigate?: (tab: 'STUDENTS' | 'MESSAGES' | 'PROFILE', subTab?: 'STUDENTS' | 'MENTORS' | 'REPORTS') => void;
@@ -16,8 +17,9 @@ interface DirectorDashboardProps {
 
 export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
   // Detail Modal State
-  const [detailModalType, setDetailModalType] = useState<'PARTICIPATION' | 'CRISIS' | 'MENTOR' | 'CONFIDENTIAL' | 'BASE_DETAIL' | null>(null);
+  const [detailModalType, setDetailModalType] = useState<'PARTICIPATION' | 'CRISIS' | 'MENTOR' | 'CONFIDENTIAL' | 'BASE_DETAIL' | 'OFFICIAL_MESSAGES' | null>(null);
   const [selectedBaseForModal, setSelectedBaseForModal] = useState<number | null>(null);
+
 
   // Live DB Queries
   const rawAllUsers = useLiveQuery(() => db.users.toArray());
@@ -100,6 +102,61 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
       };
     });
 
+    // Real Official Correspondence (Exclude system APK notices and automated broadcasts)
+    const realOfficialMessages = messages?.filter(m => 
+      m.type === 'OFFICIAL' && 
+      !isApkDownloadMessage(m) && 
+      m.senderId !== 'sys_admin' &&
+      !m.id.startsWith('msg_apk_')
+    ) || [];
+
+    // Group recipient deliveries into distinct issued official letters
+    const letterGroupMap = new Map<string, {
+      id: string;
+      senderId: string;
+      subject: string;
+      content: string;
+      date: string;
+      recipientIds: string[];
+      ccUserIds: string[];
+      readCount: number;
+    }>();
+
+    for (const m of realOfficialMessages) {
+      const dateKey = m.date ? m.date.slice(0, 16) : 'unknown';
+      const groupKey = `${m.senderId}_${(m.subject || '').trim()}_${dateKey}`;
+      if (!letterGroupMap.has(groupKey)) {
+        letterGroupMap.set(groupKey, {
+          id: m.id,
+          senderId: m.senderId,
+          subject: m.subject || 'مکاتبه رسمی بدون موضوع',
+          content: m.content,
+          date: m.date,
+          recipientIds: [m.recipientId],
+          ccUserIds: m.ccUserIds ? [...m.ccUserIds] : [],
+          readCount: m.isRead ? 1 : 0
+        });
+      } else {
+        const grp = letterGroupMap.get(groupKey)!;
+        if (!grp.recipientIds.includes(m.recipientId)) grp.recipientIds.push(m.recipientId);
+        if (m.ccUserIds) {
+          for (const cc of m.ccUserIds) {
+            if (!grp.ccUserIds.includes(cc)) grp.ccUserIds.push(cc);
+          }
+        }
+        if (m.isRead) grp.readCount += 1;
+      }
+    }
+
+    const uniqueOfficialLetters = Array.from(letterGroupMap.values()).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    const totalReadDeliveries = realOfficialMessages.filter(m => m.isRead).length;
+    const overallReadRate = realOfficialMessages.length > 0 
+      ? Math.round((totalReadDeliveries / realOfficialMessages.length) * 100) 
+      : 100;
+
     return {
       totalStudentsCount,
       totalMentorsCount,
@@ -112,10 +169,16 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
       mentorEvalReports,
       confidentialCount: confidentialReports.length,
       confidentialReports,
-      officialMessagesCount: messages?.filter(m => m.type === 'OFFICIAL').length || 0,
+      officialMessagesCount: uniqueOfficialLetters.length,
+      uniqueOfficialLettersCount: uniqueOfficialLetters.length,
+      totalOfficialDeliveriesCount: realOfficialMessages.length,
+      uniqueOfficialLetters,
+      totalReadDeliveries,
+      overallReadRate,
       baseData
     };
   }, [students, mentors, assessments, reports, messages, todayAssessmentsStudentIds]);
+
 
   // Export Excel
   const handleExportExcel = () => {
@@ -184,15 +247,28 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
           </div>
         </div>
 
-        <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+        <div 
+          onClick={() => setDetailModalType('OFFICIAL_MESSAGES')}
+          className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between cursor-pointer hover:ring-2 hover:ring-blue-400 hover:bg-slate-800 transition-all group"
+          title="مشاهده دفتر و ریز مکاتبات رسمی مدرسه"
+        >
           <div>
-            <span className="text-[11px] font-medium text-slate-400 block">مکاتبات رسمی کل</span>
-            <span className="text-2xl font-black">{stats.officialMessagesCount} نامه</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-slate-400 block">مکاتبات رسمی کل</span>
+              <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-bold group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                ریز نامه‌ها ←
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-2xl font-black">{stats.uniqueOfficialLettersCount} نامه</span>
+              <span className="text-[10px] text-slate-400 font-medium">({stats.totalOfficialDeliveriesCount} نسخه)</span>
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
             <Mail className="w-5 h-5 text-blue-400" />
           </div>
         </div>
+
 
         <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
           <div>
@@ -352,6 +428,7 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                 {detailModalType === 'MENTOR' && <TrendingUp className="w-5 h-5 text-amber-600" />}
                 {detailModalType === 'CONFIDENTIAL' && <FileText className="w-5 h-5 text-slate-600" />}
                 {detailModalType === 'BASE_DETAIL' && <Users className="w-5 h-5 text-indigo-600" />}
+                {detailModalType === 'OFFICIAL_MESSAGES' && <Mail className="w-5 h-5 text-blue-600" />}
 
                 <h3 className="font-bold text-base text-slate-800">
                   {detailModalType === 'PARTICIPATION' && 'جزئیات وضعیت مشارکت خوداظهاری امروز'}
@@ -359,7 +436,9 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                   {detailModalType === 'MENTOR' && 'جزئیات ارزیابی‌های ثبت‌شده اساتید راهنما'}
                   {detailModalType === 'CONFIDENTIAL' && 'لیست گزارشات و یادداشت‌های محرمانه'}
                   {detailModalType === 'BASE_DETAIL' && `لیست وضعیت طلاب پایه ${selectedBaseForModal}`}
+                  {detailModalType === 'OFFICIAL_MESSAGES' && 'دفتر آمار و گزارش مکاتبات رسمی مدرسه'}
                 </h3>
+
               </div>
 
               <button
@@ -586,6 +665,94 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                   </div>
                 </div>
               )}
+
+              {/* 6. OFFICIAL MESSAGES DETAIL */}
+              {detailModalType === 'OFFICIAL_MESSAGES' && (
+                <div className="space-y-4">
+                  {/* Summary Bar */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-2xl">
+                      <span className="text-[11px] text-blue-700 dark:text-blue-300 font-bold block">کل نامه‌های صادرشده:</span>
+                      <span className="text-xl font-black text-blue-900 dark:text-blue-100 mt-1 block">
+                        {stats.uniqueOfficialLettersCount} فقره نامه
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">مکاتبات مستقل رسمی صادرشده</span>
+                    </div>
+
+                    <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 p-3.5 rounded-2xl">
+                      <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold block">مجموع نسخه‌های تحویلی:</span>
+                      <span className="text-xl font-black text-indigo-900 dark:text-indigo-100 mt-1 block">
+                        {stats.totalOfficialDeliveriesCount} نسخه
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">تحویل به گیرندگان اصلی و رونوشت‌ها</span>
+                    </div>
+
+                    <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-2xl">
+                      <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold block">نرخ مطالعه نامه‌ها:</span>
+                      <span className="text-xl font-black text-emerald-900 dark:text-emerald-100 mt-1 block">
+                        {stats.overallReadRate}٪
+                      </span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{stats.totalReadDeliveries} از {stats.totalOfficialDeliveriesCount} نسخه رویت‌شده</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      فهرست مکاتبات و ابلاغیه‌های رسمی صادره در مدرسه:
+                    </h4>
+
+                    {stats.uniqueOfficialLetters.length === 0 ? (
+                      <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 text-center text-slate-400">
+                        <Mail className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                        <span className="text-xs font-bold block">تاکنون هیچ نامه رسمی اداری در سامانه صادر نشده است.</span>
+                        <span className="text-[11px] text-slate-400 block mt-1">جهت ارسال نامه جدید، به بخش «پیام‌ها و مکاتبات» مراجعه فرمایید.</span>
+                      </div>
+                    ) : (
+                      stats.uniqueOfficialLetters.map(letter => {
+                        const author = allUsers?.find(u => u.id === letter.senderId);
+                        const authorName = author ? (author.name || `${author.firstName || ''} ${author.lastName || ''}`.trim()) : 'مسئول مدرسه';
+                        const authorRole = author ? (author.role === 'DIRECTOR' ? 'مدیر مدرسه' : author.role === 'VICE_PRINCIPAL' ? 'معاونت تهذیب' : author.role === 'MENTOR' ? 'استاد راهنما' : 'کاربر') : 'مدیریت';
+                        const readPct = letter.recipientIds.length > 0 ? Math.round((letter.readCount / letter.recipientIds.length) * 100) : 0;
+
+                        return (
+                          <div key={letter.id} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2 shadow-2xs">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-black text-slate-800 dark:text-slate-100">{letter.subject}</span>
+                                <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                                  {letter.recipientIds.length > 1 ? `ارسال گروهی به ${letter.recipientIds.length} نفر` : 'نامه فردی'}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {new Date(letter.date).toLocaleDateString('fa-IR')} - {new Date(letter.date).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                              {letter.content}
+                            </p>
+
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-1 text-[11px] text-slate-500">
+                              <span>
+                                <strong>فرستنده:</strong> {authorName} ({authorRole})
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span>وضعیت رویت گیرندگان:</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">
+                                  {letter.readCount} از {letter.recipientIds.length} نفر ({readPct}٪)
+                                </span>
+                                <div className="w-16 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${readPct}%` }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -600,20 +767,24 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
               {onNavigate && (
                 <button
                   onClick={() => {
+                    const currentType = detailModalType;
                     setDetailModalType(null);
-                    if (detailModalType === 'CONFIDENTIAL' || detailModalType === 'MENTOR') {
+                    if (currentType === 'OFFICIAL_MESSAGES') {
+                      onNavigate('MESSAGES');
+                    } else if (currentType === 'CONFIDENTIAL' || currentType === 'MENTOR') {
                       onNavigate('STUDENTS', 'REPORTS');
                     } else {
                       onNavigate('STUDENTS', 'STUDENTS');
                     }
                   }}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>انتقال به بخش رصد کامل</span>
+                  <span>{detailModalType === 'OFFICIAL_MESSAGES' ? 'ورود به بخش پیام‌ها و مکاتبات' : 'انتقال به بخش رصد کامل'}</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
+
           </div>
         </div>
       )}

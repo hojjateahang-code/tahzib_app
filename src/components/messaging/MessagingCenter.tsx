@@ -13,7 +13,13 @@ import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
 import { getApiUrl, getAbsoluteApiUrl } from '../../lib/apiConfig';
 import { triggerApkDownload } from '../../lib/downloadHelper';
-import { syncApkNoticeForUser, isApkDownloadMessage, getCachedApkNoticeStatus } from '../../utils/apkNoticeSync';
+import { 
+  syncApkNoticeForUser, 
+  isApkDownloadMessage, 
+  getCachedApkNoticeStatus,
+  markApkNoticeAsRead,
+  isApkNoticeReadByUser
+} from '../../utils/apkNoticeSync';
 
 const ROLE_LABELS: Record<Role, string> = {
   DIRECTOR: 'مدیر مدرسه',
@@ -182,7 +188,11 @@ export function MessagingCenter() {
 
     if (unreadOfficial.length > 0) {
       unreadOfficial.forEach(m => {
-        db.messages.update(m.id, { isRead: true });
+        db.messages.update(m.id, { isRead: true, updatedAt: Date.now() });
+        localStorage.setItem(`read_msg_${m.id}`, 'true');
+        if (isApkDownloadMessage(m)) {
+          markApkNoticeAsRead(currentUser.id, m.id);
+        }
       });
       triggerSync();
     }
@@ -196,7 +206,11 @@ export function MessagingCenter() {
     );
     if (unread.length > 0) {
       for (const m of unread) {
-        await db.messages.update(m.id, { isRead: true });
+        await db.messages.update(m.id, { isRead: true, updatedAt: Date.now() });
+        localStorage.setItem(`read_msg_${m.id}`, 'true');
+        if (isApkDownloadMessage(m)) {
+          markApkNoticeAsRead(currentUser.id, m.id);
+        }
       }
       triggerSync();
     }
@@ -205,12 +219,16 @@ export function MessagingCenter() {
   // Unread message counts for badges
   const officialUnreadCount = useMemo(() => {
     if (!myMessages || !currentUser) return 0;
-    return myMessages.filter(m => 
-      m.type === 'OFFICIAL' && 
-      (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id))) && 
-      !m.isRead
-    ).length;
+    const noticeDisabled = getCachedApkNoticeStatus() === false;
+    return myMessages.filter(m => {
+      if (m.type !== 'OFFICIAL') return false;
+      if (noticeDisabled && isApkDownloadMessage(m)) return false;
+      if (isApkDownloadMessage(m) && isApkNoticeReadByUser(currentUser.id, m)) return false;
+      if (m.isRead || localStorage.getItem(`read_msg_${m.id}`) === 'true') return false;
+      return (m.recipientId === currentUser.id || (m.ccUserIds && m.ccUserIds.includes(currentUser.id)));
+    }).length;
   }, [myMessages, currentUser]);
+
 
   const chatUnreadCount = useMemo(() => {
     if (!myMessages || !currentUser) return 0;
@@ -659,7 +677,11 @@ export function MessagingCenter() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-base font-black text-slate-800">{msg.subject || 'بدون موضوع'}</h3>
-                            {isSentByMe ? (
+                            {isApkDownloadMessage(msg) ? (
+                              <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full font-bold border border-indigo-200">
+                                📱 پیام بروزرسانی برنامه
+                              </span>
+                            ) : isSentByMe ? (
                               <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full font-bold">
                                 ارسالی شما
                               </span>
@@ -677,7 +699,35 @@ export function MessagingCenter() {
                                 کاربر حذف شده
                               </span>
                             )}
+
+                            {/* Read / Unread Indicator & Dismiss Counter Action */}
+                            {!isSentByMe && (
+                              (!msg.isRead && !isApkNoticeReadByUser(currentUser?.id || '', msg)) ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    db.messages.update(msg.id, { isRead: true, updatedAt: Date.now() });
+                                    localStorage.setItem(`read_msg_${msg.id}`, 'true');
+                                    if (currentUser) {
+                                      markApkNoticeAsRead(currentUser.id, msg.id);
+                                    }
+                                    triggerSync();
+                                  }}
+                                  className="text-[10px] bg-rose-100 hover:bg-rose-200 text-rose-700 font-black px-2 py-0.5 rounded-full border border-rose-300 transition-colors cursor-pointer flex items-center gap-1"
+                                  title="کلیک برای علامت‌گذاری به عنوان خوانده‌شده و حذف شمارنده"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping" />
+                                  <span>جدید (خوانده‌نشده - کلیک جهت رویت)</span>
+                                </button>
+                              ) : (
+                                <span className="text-[10px] bg-slate-100 text-slate-400 font-medium px-2 py-0.5 rounded-full">
+                                  ✓ رویت‌شده
+                                </span>
+                              )
+                            )}
                           </div>
+
                           <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
                             <span>
                               <strong>فرستنده:</strong> {sender ? `${getUserDisplayName(sender)} (${ROLE_LABELS[sender.role] || sender.role})` : 'کاربر سیستم'}
@@ -722,6 +772,9 @@ export function MessagingCenter() {
                             rel="noopener noreferrer"
                             onClick={(e) => {
                               e.preventDefault();
+                              if (currentUser) {
+                                markApkNoticeAsRead(currentUser.id, msg.id);
+                              }
                               triggerApkDownload();
                             }}
                             className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
@@ -733,11 +786,15 @@ export function MessagingCenter() {
                           <button
                             type="button"
                             onClick={() => {
+                              if (currentUser) {
+                                markApkNoticeAsRead(currentUser.id, msg.id);
+                              }
                               const url = getAbsoluteApiUrl('/download/tahzib.apk');
                               navigator.clipboard.writeText(url);
                               alert('لینک مستقیم دانلود کپی شد:\n' + url);
                             }}
                             className="w-full sm:w-auto px-3 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+
                             title="کپی لینک مستقیم فایل جهت پیست در مرورگر"
                           >
                             <Copy className="w-3.5 h-3.5" />
