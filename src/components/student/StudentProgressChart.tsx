@@ -7,6 +7,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Filter, Download, Printer, Loader2, Sparkles, Check, Image as ImageIcon, BarChart2, Smartphone, Table } from 'lucide-react';
 import { PersonalHabitCourseTable } from './PersonalHabitCourseTable';
 import { StudentScreenTimeChart } from './StudentScreenTimeChart';
+import { safeFormatDateFa } from '../../utils/date';
 import html2canvas from 'html2canvas';
 
 const METRICS = [
@@ -106,7 +107,7 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
 
       const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      const faDate = new Intl.DateTimeFormat('fa-IR').format(new Date()).replace(/\//g, '-');
+      const faDate = safeFormatDateFa(new Date().toISOString()).replace(/\//g, '-');
       link.download = `نمودار_پیشرفت_تهذیب_${timeRange}روزه_${faDate}.png`;
       link.href = dataUrl;
       link.click();
@@ -465,7 +466,7 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
               </h3>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              بازه زمانی: {timeRange} روز اخیر | تاریخ دریافت خروجی: {new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(new Date())}
+              بازه زمانی: {timeRange} روز اخیر | تاریخ دریافت خروجی: {safeFormatDateFa(new Date().toISOString())}
             </p>
           </div>
 

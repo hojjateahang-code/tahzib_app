@@ -13,6 +13,7 @@ import { MinioSyncModal } from './components/sync/MinioSyncModal';
 import { LiveUpdateChecker } from './components/common/LiveUpdateChecker';
 import { syncMinIOData } from './sync';
 import { syncApkNoticeForUser } from './utils/apkNoticeSync';
+import { UserProfileModal } from './components/common/UserProfileModal';
 
 const COLORS = [
   { id: 'indigo', label: 'نیلی (اصلی)', hex: '#4f46e5' },
@@ -29,6 +30,7 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme-dark') === 'true');
   const [themeColor, setThemeColor] = useState(() => localStorage.getItem('theme-color') || 'indigo');
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('theme-dark', isDark.toString());
@@ -124,19 +126,24 @@ export default function App() {
     <div className="flex flex-col h-screen w-full bg-[#F1F5F9] dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100" dir="rtl">
       <LiveUpdateChecker />
       <header className="bg-white dark:bg-slate-900 shadow-sm border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex justify-between items-center relative z-30 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700">
+        <button
+          type="button"
+          onClick={() => setShowProfileModal(true)}
+          className="flex items-center gap-3 text-right hover:opacity-85 transition-opacity cursor-pointer group rounded-xl p-1 -m-1"
+          title="مشاهده و ویرایش مشخصات پروفایل کاربری"
+        >
+          <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-700 group-hover:border-indigo-400 dark:group-hover:border-indigo-500 transition-colors">
             {currentUser.profileImage ? (
               <img src={currentUser.profileImage} alt="Profile" className="w-full h-full object-cover" />
             ) : (
-              <UserIcon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+              <UserIcon className="w-5 h-5 text-slate-600 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
             )}
           </div>
           <div>
-            <h1 className="text-sm font-bold text-slate-800 dark:text-slate-100">{currentUser.name}</h1>
+            <h1 className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{currentUser.name}</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">{roleNameMap[currentUser.role]}</p>
           </div>
-        </div>
+        </button>
         
         <div className="flex items-center gap-2">
           <MinioSyncModal />
@@ -201,6 +208,11 @@ export default function App() {
       <main className="flex-1 p-2 sm:p-4 overflow-y-auto">
         {renderPanel()}
       </main>
+
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   );
 }

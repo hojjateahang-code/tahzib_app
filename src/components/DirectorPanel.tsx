@@ -8,7 +8,7 @@ import { StudentMonitoringList } from './StudentMonitoringList';
 import { MentorMonitoringList } from './vice-principal/MentorMonitoringList';
 import { ReportsMonitoringList } from './vice-principal/ReportsMonitoringList';
 import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
-import { StudentProfile } from './student/StudentProfile';
+import { UserProfile } from './UserProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 import { isApkDownloadMessage, getCachedApkNoticeStatus, isApkNoticeReadByUser } from '../utils/apkNoticeSync';
@@ -149,7 +149,7 @@ export function DirectorPanel() {
         {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="DIRECTOR" />}
         {activeTab === 'USERS' && <VicePrincipalUsers />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
-        {activeTab === 'PROFILE' && <StudentProfile />}
+        {activeTab === 'PROFILE' && <UserProfile />}
       </div>
     </div>
   );

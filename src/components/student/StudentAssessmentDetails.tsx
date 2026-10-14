@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { Calendar, FileText, CheckCircle2, XCircle, AlertCircle, MessageSquare, Smartphone, Moon, Clock, Lock, CheckCheck, Trophy, Sparkles } from 'lucide-react';
 import { calculateSingleAssessmentScore } from '../../utils/scoringSystem';
+import { safeFormatDateFa } from '../../utils/date';
 
 interface Props {
   studentId: string;
@@ -57,7 +58,7 @@ export function StudentAssessmentDetails({ studentId }: Props) {
       >
         {assessments.map(a => (
           <option key={a.id} value={a.date}>
-            {new Date(a.date).toLocaleDateString('fa-IR')}
+            {safeFormatDateFa(a.date)}
           </option>
         ))}
       </select>

@@ -5,7 +5,7 @@ import { db } from '../db';
 import { UserCheck, CheckSquare, User as UserIcon, Mail, Trophy } from 'lucide-react';
 import { MentorDashboard } from './mentor/MentorDashboard';
 import { MentorStudents } from './mentor/MentorStudents';
-import { StudentProfile } from './student/StudentProfile';
+import { UserProfile } from './UserProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 
@@ -114,7 +114,7 @@ export function MentorPanel() {
         {activeTab === 'STUDENTS' && <MentorStudents />}
         {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="MENTOR" />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
-        {activeTab === 'PROFILE' && <StudentProfile />}
+        {activeTab === 'PROFILE' && <UserProfile />}
       </div>
     </div>
   );

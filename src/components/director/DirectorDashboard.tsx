@@ -475,7 +475,7 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                               <img src={s.profileImage} alt={s.name} className="w-8 h-8 rounded-full object-cover border border-slate-200" />
                             ) : (
                               <div className="w-8 h-8 rounded-full bg-slate-100 font-bold text-xs flex items-center justify-center text-slate-600">
-                                {s.name.charAt(0)}
+                                {(s.name || 'کاربر').charAt(0)}
                               </div>
                             )}
                             <div>
@@ -521,7 +521,7 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                                 <img src={s.profileImage} alt={s.name} className="w-9 h-9 rounded-full object-cover border" />
                               ) : (
                                 <div className="w-9 h-9 rounded-full bg-rose-100 text-rose-800 font-bold text-xs flex items-center justify-center">
-                                  {s.name.charAt(0)}
+                                  {(s.name || 'کاربر').charAt(0)}
                                 </div>
                               )}
                               <div>
@@ -645,7 +645,7 @@ export function DirectorDashboard({ onNavigate }: DirectorDashboardProps) {
                                 <img src={s.profileImage} alt={s.name} className="w-8 h-8 rounded-full object-cover border border-slate-200" />
                               ) : (
                                 <div className="w-8 h-8 rounded-full bg-slate-100 font-bold text-xs flex items-center justify-center text-slate-600">
-                                  {s.name.charAt(0)}
+                                  {(s.name || 'کاربر').charAt(0)}
                                 </div>
                               )}
                               <div>

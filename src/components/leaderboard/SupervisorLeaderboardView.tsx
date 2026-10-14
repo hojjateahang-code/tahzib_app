@@ -455,11 +455,11 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm">
-                  {selectedProfile.studentName.slice(0, 1)}
+                  {(selectedProfile.studentName || 'دانش‌پژوه').charAt(0)}
                 </div>
                 <div>
                   <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                    کارنامه جامع: {selectedProfile.studentName}
+                    کارنامه جامع: {selectedProfile.studentName || 'نامشخص'}
                   </h4>
                   <span className="text-[10px] text-slate-500 font-bold">
                     پایه {selectedProfile.base || 1} • کدملی: {selectedProfile.nationalId || 'نامشخص'}

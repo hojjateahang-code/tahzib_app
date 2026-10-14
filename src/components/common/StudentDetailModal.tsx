@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Component, ErrorInfo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { 
   X, Phone, MessageSquare, User, Calendar, ShieldCheck, 
   BarChart2, Smartphone, FileText, CheckCircle2, AlertCircle, ExternalLink, Clock, BookOpen, Info, Activity,
-  Trophy, Flame
+  Trophy, Flame, AlertTriangle
 } from 'lucide-react';
 import { StudentAssessmentDetails } from '../student/StudentAssessmentDetails';
 import { StudentScreenTimeChart } from '../student/StudentScreenTimeChart';
@@ -12,6 +12,7 @@ import { StudentProgressChart } from '../student/StudentProgressChart';
 import { SupervisorStudentNotes } from '../supervisor/SupervisorStudentNotes';
 import { ReportContentDisplay } from './ReportContentDisplay';
 import { getReportAuthorInfo } from '../../utils/reportUtils';
+import { safeFormatDateFa } from '../../utils/date';
 import { 
   calculateStreaks, 
   getLevelDetails, 
@@ -22,6 +23,58 @@ import {
 interface Props {
   studentId: string | null;
   onClose: () => void;
+}
+
+interface ModalErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ModalErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class ModalErrorBoundary extends Component<ModalErrorBoundaryProps, ModalErrorBoundaryState> {
+  public state: ModalErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
+
+  constructor(props: ModalErrorBoundaryProps) {
+    super(props);
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, info: ErrorInfo) {
+    console.error('ModalErrorBoundary caught error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-3xl text-center space-y-3">
+          <AlertTriangle className="w-10 h-10 text-rose-500 mx-auto" />
+          <h4 className="font-bold text-sm text-rose-800 dark:text-rose-200">
+            خطا در بارگذاری بخش تفصیلی کارنامه
+          </h4>
+          <p className="text-xs text-rose-600 dark:text-rose-300">
+            مشکلی در محاسبه یا نمایش داده‌های این بخش رخ داد. سایر اطلاعات کاربر در دسترس است.
+          </p>
+          <button
+            type="button"
+            onClick={() => (this as any).setState({ hasError: false, error: null })}
+            className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition"
+          >
+            تلاش مجدد
+          </button>
+        </div>
+      );
+    }
+    return (this as any).props.children;
+  }
 }
 
 export function StudentDetailModal({ studentId, onClose }: Props) {
@@ -73,29 +126,37 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
   const filteredReports = React.useMemo(() => {
     if (!reports) return [];
     if (!reportSearch) return reports;
-    return reports.filter(r => r.content.includes(reportSearch));
+    return reports.filter(r => r && r.content && r.content.includes(reportSearch));
   }, [reports, reportSearch]);
+
+  const scoreInfo = useMemo(() => {
+    try {
+      if (!assessments || assessments.length === 0) return null;
+      const dates = assessments.map(a => a?.date).filter(Boolean);
+      const { currentStreak } = calculateStreaks(dates);
+      let totalScore = calculateStreakBonus(currentStreak || 0);
+      assessments.forEach(a => {
+        if (!a) return;
+        const b = calculateSingleAssessmentScore(a);
+        if (b) {
+          totalScore += ((b.prayers || 0) + (b.coreTasks || 0) + (b.tahzibPrograms || 0) + (b.habits || 0) + (b.digitalDiscipline || 0) + (b.consistency || 0));
+        }
+      });
+      if (isNaN(totalScore)) totalScore = 0;
+      const level = getLevelDetails(totalScore);
+      return { totalScore, currentStreak: currentStreak || 0, level };
+    } catch (err) {
+      console.error('Error calculating scoreInfo:', err);
+      return null;
+    }
+  }, [assessments]);
 
   if (!studentId || !student) return null;
 
+  const displayName = student.name || student.username || 'دانش‌پژوه';
+  const initialChar = displayName.trim().charAt(0) || 'ک';
   const phoneFormatted = student.phone || 'نامشخص';
   const cleanPhone = student.phone ? student.phone.replace(/[^0-9+]/g, '') : '';
-
-  // Get screen time logs
-  const screenTimeLogs = assessments?.filter(a => a.screenTime) || [];
-
-  const scoreInfo = useMemo(() => {
-    if (!assessments || assessments.length === 0) return null;
-    const dates = assessments.map(a => a.date);
-    const { currentStreak } = calculateStreaks(dates);
-    let totalScore = calculateStreakBonus(currentStreak);
-    assessments.forEach(a => {
-      const b = calculateSingleAssessmentScore(a);
-      totalScore += (b.prayers + b.coreTasks + b.tahzibPrograms + b.habits + b.digitalDiscipline + b.consistency);
-    });
-    const level = getLevelDetails(totalScore);
-    return { totalScore, currentStreak, level };
-  }, [assessments]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-150">
@@ -105,11 +166,15 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
         <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex justify-between items-start sm:items-center gap-4 border-b border-indigo-900/50">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-extrabold text-lg shrink-0 shadow-inner">
-              {student.name.slice(0, 1)}
+              {student.profileImage ? (
+                <img src={student.profileImage} alt={displayName} className="w-full h-full object-cover rounded-2xl" />
+              ) : (
+                <span>{initialChar}</span>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-bold text-white">{student.name}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">{displayName}</h3>
                 <span className="text-[11px] font-bold bg-indigo-500/20 text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-500/30">
                   پایه {student.base || 1}
                 </span>
@@ -127,9 +192,9 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
                 {scoreInfo && (
                   <span className="text-[10px] font-black bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1.5 shadow-2xs">
                     <Trophy className="w-3 h-3 text-amber-400" />
-                    <span>{scoreInfo.level.title}</span>
+                    <span>{scoreInfo.level?.title || 'سطح تهذیب'}</span>
                     <span className="opacity-50">•</span>
-                    <span>{scoreInfo.totalScore.toLocaleString('fa-IR')} امتیاز</span>
+                    <span>{(scoreInfo.totalScore || 0).toLocaleString('fa-IR')} امتیاز</span>
                     {scoreInfo.currentStreak > 0 && (
                       <>
                         <span className="opacity-50">•</span>
@@ -141,8 +206,8 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
                 )}
               </div>
               <p className="text-xs text-slate-300 mt-1 flex items-center gap-3 flex-wrap">
-                <span>کد ملی: <strong className="text-white font-mono">{student.nationalId || 'ثبت نشده'}</strong></span>
-                {mentor && <span>استاد راهنما: <strong className="text-indigo-300">{mentor.name}</strong></span>}
+                <span>کد ملی: <strong className="text-white font-mono">{student.nationalId || student.username || 'ثبت نشده'}</strong></span>
+                {mentor && <span>استاد راهنما: <strong className="text-indigo-300">{mentor.name || mentor.username}</strong></span>}
               </p>
             </div>
           </div>
@@ -150,6 +215,7 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+            title="بستن"
           >
             <X className="w-5 h-5" />
           </button>
@@ -159,7 +225,7 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
         <div className="bg-slate-50 dark:bg-slate-800/80 p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-2">
             <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">اطلاعات تماس و وضعیت طلبه</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">اطلاعات تماس و وضعیت پرونده طلبه</span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -241,71 +307,72 @@ export function StudentDetailModal({ studentId, onClose }: Props) {
           </div>
         </div>
 
-        {/* Modal Main Content */}
+        {/* Modal Main Content wrapped in safe Error Boundary */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {activeTab === 'CHART' && (
-            <StudentProgressChart studentId={studentId} />
-          )}
+          <ModalErrorBoundary>
+            {activeTab === 'CHART' && (
+              <StudentProgressChart studentId={studentId} />
+            )}
 
+            {activeTab === 'ASSESSMENT' && (
+              <StudentAssessmentDetails studentId={studentId} />
+            )}
 
-          {activeTab === 'ASSESSMENT' && (
-            <StudentAssessmentDetails studentId={studentId} />
-          )}
+            {activeTab === 'NOTES' && (
+              <SupervisorStudentNotes studentId={studentId} studentName={displayName} />
+            )}
 
-          {activeTab === 'NOTES' && (
-            <SupervisorStudentNotes studentId={studentId} studentName={student?.name} />
-          )}
-
-          {activeTab === 'REPORTS' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-                <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
-                  <Info className="w-5 h-5 text-indigo-500" />
-                  گزارشات و ارجاعات پیشین
-                </h4>
-                
-                <div className="mb-3 relative pt-1">
-                  <Activity className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="جستجو در گزارش‌ها..."
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 pr-9 pl-3 text-xs outline-none focus:border-emerald-500 text-slate-800 dark:text-slate-100"
-                    value={reportSearch}
-                    onChange={e => setReportSearch(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2">
-                  {(!filteredReports || filteredReports.filter(r => !r.isConfidential).length === 0) && (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">گزارشی یافت نشد.</p>
-                  )}
-                  {filteredReports && filteredReports.filter(r => !r.isConfidential).map(report => {
-                    const authorInfo = getReportAuthorInfo(report, allUsers);
-                    return (
-                      <div key={report.id} className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                            <span>{authorInfo.name}</span>
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-md">
-                              ({authorInfo.roleLabel})
+            {activeTab === 'REPORTS' && (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+                  <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-4">
+                    <Info className="w-5 h-5 text-indigo-500" />
+                    گزارشات و ارجاعات پیشین
+                  </h4>
+                  
+                  <div className="mb-3 relative pt-1">
+                    <Activity className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="جستجو در گزارش‌ها..."
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-2 pr-9 pl-3 text-xs outline-none focus:border-emerald-500 text-slate-800 dark:text-slate-100"
+                      value={reportSearch}
+                      onChange={e => setReportSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2">
+                    {(!filteredReports || filteredReports.filter(r => !r.isConfidential).length === 0) && (
+                      <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">گزارشی یافت نشد.</p>
+                    )}
+                    {filteredReports && filteredReports.filter(r => !r.isConfidential).map(report => {
+                      const authorInfo = getReportAuthorInfo(report, allUsers);
+                      return (
+                        <div key={report.id} className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                              <span>{authorInfo.name}</span>
+                              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-md">
+                                ({authorInfo.roleLabel})
+                              </span>
                             </span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400" dir="ltr">
-                            {new Date(report.date).toLocaleDateString('fa-IR')}
-                          </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400" dir="ltr">
+                              {safeFormatDateFa(report.date)}
+                            </span>
+                          </div>
+                          <ReportContentDisplay content={report.content} />
                         </div>
-                        <ReportContentDisplay content={report.content} />
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </ModalErrorBoundary>
         </div>
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center">
-          <span className="text-xs text-slate-500 font-medium">شناسه طلبه: {student.id.slice(0, 8)}...</span>
+          <span className="text-xs text-slate-500 font-medium">شناسه طلبه: {(student.id || '').slice(0, 8)}...</span>
           <button
             onClick={onClose}
             className="px-5 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl font-bold text-xs cursor-pointer transition-colors"

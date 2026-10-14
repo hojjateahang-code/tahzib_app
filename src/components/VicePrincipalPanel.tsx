@@ -7,7 +7,7 @@ import { VicePrincipalDashboard } from './vice-principal/VicePrincipalDashboard'
 import { VicePrincipalTasks } from './vice-principal/VicePrincipalTasks';
 import { VicePrincipalUsers } from './vice-principal/VicePrincipalUsers';
 import { TahzibProgramsManagement } from './vice-principal/TahzibProgramsManagement';
-import { StudentProfile } from './student/StudentProfile';
+import { UserProfile } from './UserProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 import { SupervisorLeaderboardView } from './leaderboard/SupervisorLeaderboardView';
 
@@ -129,7 +129,7 @@ export function VicePrincipalPanel() {
         {activeTab === 'TAHZIB_PROGRAMS' && <TahzibProgramsManagement />}
         {activeTab === 'LEADERBOARD' && <SupervisorLeaderboardView role="VICE_PRINCIPAL" />}
         {activeTab === 'MESSAGES' && <MessagingCenter />}
-        {activeTab === 'PROFILE' && <StudentProfile />}
+        {activeTab === 'PROFILE' && <UserProfile />}
       </div>
     </div>
   );
