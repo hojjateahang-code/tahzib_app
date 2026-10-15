@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { useAuth } from '../../store';
 import { format, subDays, startOfDay } from 'date-fns';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
 import { Filter, Download, Printer, Loader2, Sparkles, Check, Image as ImageIcon, BarChart2, Smartphone, Table } from 'lucide-react';
 import { PersonalHabitCourseTable } from './PersonalHabitCourseTable';
 import { StudentScreenTimeChart } from './StudentScreenTimeChart';
@@ -33,25 +33,43 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     const data = payload[0].payload;
     return (
       <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg text-xs" dir="rtl">
-        <p className="font-bold text-slate-800 dark:text-slate-100 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1">{label}</p>
+        <div className="flex items-center justify-between gap-2 mb-2 border-b border-slate-100 dark:border-slate-800 pb-1">
+          <p className="font-bold text-slate-800 dark:text-slate-100">{label}</p>
+          {data.isHoliday && (
+            <span className="text-[10px] font-black bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-200 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">
+              🏖️ روز تعطیل
+            </span>
+          )}
+        </div>
+
+        {data.isHoliday && (
+          <div className="mb-2 p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-900/40">
+            برنامه‌های تعطیل در این روز از درصد محاسبه کسر نشدند.
+          </div>
+        )}
+
         <div className="space-y-1">
           {payload.map((p: any) => {
-             let valueText = p.value === 100 ? 'انجام شد/کامل' : (p.value > 0 ? p.value + '%' : 'انجام نشد/ترک');
-             if (data['raw_' + p.dataKey]) {
-                const raw = data['raw_' + p.dataKey];
-                if (raw === 'ADA_JAMAAT' || raw === 'JAMAAT') valueText = 'اداء به جماعت';
-                else if (raw === 'ADA_FORADA' || raw === 'FURADA') valueText = 'اداء فرادی';
-                else if (raw === 'QAZA') valueText = 'قضا';
-                else if (raw === 'TARK') valueText = 'ترک';
-                else if (raw === 'NONE') valueText = 'انجام نشده';
+             let valueText = p.value === 100 ? 'انجام شد/کامل' : (p.value > 0 ? p.value + '%' : 'انجام نشد');
+             const raw = data['raw_' + p.dataKey];
+             if (p.value < 0 || raw === 'TARK') {
+               valueText = 'تارک نماز ❌ (نمره منفی)';
+             } else if (p.value === 0 && (!raw || raw === 'NONE')) {
+               valueText = 'عدم ثبت ⚪ (صفر)';
+             } else if (raw) {
+                if (raw === 'ADA_JAMAAT' || raw === 'JAMAAT') valueText = 'اداء به جماعت (۱۰۰٪)';
+                else if (raw === 'ADA_FORADA' || raw === 'FURADA') valueText = 'اداء فرادی (۷۵٪)';
+                else if (raw === 'QAZA') valueText = 'قضا (۳۵٪)';
                 else if (raw === 'FULL') valueText = 'کامل';
-                else if (raw === 'PARTIAL') valueText = 'ناقص';
-                else if (raw === 'HOLIDAY' || raw === 'تعطیل' || raw === 'تعطیل است') valueText = 'تعطیل است 🏖️';
+                else if (raw === 'PARTIAL') valueText = 'ناقص (۵۰٪)';
+                else if (raw === 'HOLIDAY' || raw === 'تعطیل' || raw === 'تعطیل است') valueText = 'تعطیل است 🏖️ (محاسبه نشد)';
              }
              return (
                <div key={p.dataKey} className="flex justify-between gap-4">
                  <span style={{ color: p.color }} className="font-bold">{p.name}:</span>
-                 <span className="text-slate-600 dark:text-slate-300 font-medium">{valueText}</span>
+                 <span className={`font-medium ${p.value < 0 ? 'text-rose-600 dark:text-rose-400 font-black' : p.value === 0 ? 'text-slate-400 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                   {valueText}
+                 </span>
                </div>
              )
           })}
@@ -163,32 +181,43 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
       };
 
       if (assessment) {
-        let pTotal = 0, pCompleted = 0;
+        let pTotal = 0, pCompleted = 0, tarkCount = 0;
         const prayers = ['namazSobh', 'namazZohr', 'namazAsr', 'namazMaghreb', 'namazEsha'] as const;
         prayers.forEach(p => {
-          pTotal++;
           const status = assessment[p];
+          entry['raw_' + p] = status;
           if (status === 'ADA_JAMAAT' || status === 'JAMAAT') {
-            pCompleted++;
+            pTotal++;
+            pCompleted += 1;
             entry[p] = 100;
           } else if (status === 'ADA_FORADA' || status === 'FURADA') {
-            pCompleted++;
+            pTotal++;
+            pCompleted += 0.75;
             entry[p] = 75;
           } else if (status === 'QAZA') {
+            pTotal++;
+            pCompleted += 0.35;
             entry[p] = 35;
+          } else if (status === 'TARK') {
+            pTotal++;
+            tarkCount++;
+            // خروجی منفی برای تارک نماز در نمودار
+            entry[p] = -25;
           } else {
+            // عدم ثبت روی خط مبنا (صفر)
             entry[p] = 0;
           }
-          entry['raw_' + p] = status;
         });
         
         let tTotal = 0, tCompleted = 0;
+        let dayHasHoliday = false;
         const tasks = ['saharKhizi', 'telavatNoor', 'classAttendance', 'mabahese', 'earlySleep'] as const;
         tasks.forEach(t => {
           const val = assessment[t];
           if (val === 'HOLIDAY' || val === 'تعطیل' || val === 'تعطیل است') {
             entry['raw_' + t] = 'HOLIDAY';
-            // Do not increment tTotal for holidays so percentage is not penalized
+            dayHasHoliday = true;
+            // در روزهای تعطیل مخرج کسر افزایش نمی‌یابد تا درصد جریمه نشود
           } else {
             tTotal++;
             if (val === 'FULL' || val === true) {
@@ -203,12 +232,28 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
             entry['raw_' + t] = val;
           }
         });
+
+        // بررسی رویدادهای تعطیل یا نشان تعطیل بودن روز
+        if (dayHasHoliday || (assessment as any).isHoliday) {
+          entry.isHoliday = true;
+        }
         
         let total = pTotal + tTotal;
         let completed = pCompleted + tCompleted;
         
-        entry.percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-        entry.prayersPct = pTotal > 0 ? Math.round((pCompleted / pTotal) * 100) : 0;
+        // اگر همه نمازها ترک شده باشند به محدوده منفی می‌رود
+        if (tarkCount > 0 && pCompleted === 0) {
+          entry.prayersPct = -25;
+        } else {
+          entry.prayersPct = pTotal > 0 ? Math.round((pCompleted / pTotal) * 100) : 0;
+        }
+
+        if (tarkCount > 0 && completed === 0) {
+          entry.percentage = -25;
+        } else {
+          entry.percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+        }
+
         entry.tasksPct = tTotal > 0 ? Math.round((tCompleted / tTotal) * 100) : 0;
         entry.notes = assessment.notes || {};
       }
@@ -272,16 +317,21 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
   const isOnlyPrayersFilter = selectedMetrics.length > 0 && selectedMetrics.every(m => METRICS.find(x => x.id === m)?.group === 'prayers');
   const isOnlySelectableTasks = selectedMetrics.length > 0 && selectedMetrics.every(m => ['classAttendance', 'mabahese'].includes(m));
 
-  let yTicks = [0, 25, 50, 75, 100];
-  let yFormatter = (v: number) => `${v}%`;
+  let yTicks = [-25, 0, 25, 50, 75, 100];
+  let yFormatter = (v: number) => {
+    if (v < 0) return 'تارک (-۲۵)';
+    if (v === 0) return 'عدم ثبت (۰)';
+    return `${v}%`;
+  };
 
   if (isOnlyPrayersFilter) {
-    yTicks = [0, 35, 75, 100];
+    yTicks = [-25, 0, 35, 75, 100];
     yFormatter = (v: number) => {
       if (v >= 90) return 'جماعت';
       if (v >= 60) return 'فرادی';
       if (v >= 20) return 'قضا';
-      return 'ترک';
+      if (v === 0) return 'عدم ثبت';
+      return 'تارک نماز ❌';
     };
   } else if (isOnlySelectableTasks) {
     yTicks = [0, 50, 100];
@@ -485,10 +535,11 @@ export function StudentProgressChart({ studentId }: { studentId?: string }) {
                 tick={{ fontSize: 10, fill: '#64748b' }} 
                 axisLine={false} 
                 tickLine={false} 
-                domain={[0, 100]} 
+                domain={[-30, 100]} 
                 ticks={yTicks}
                 tickFormatter={yFormatter}
               />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
               {METRICS.filter(m => selectedMetrics.includes(m.id)).map((m) => (

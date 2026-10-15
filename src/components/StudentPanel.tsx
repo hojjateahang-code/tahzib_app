@@ -17,10 +17,15 @@ import { StudentCoursesView } from './student/StudentCoursesView';
 import { StudentPlannerView } from './planner/StudentPlannerView';
 import { GraduationCap } from 'lucide-react';
 import { isApkDownloadMessage, getCachedApkNoticeStatus, isApkNoticeReadByUser } from '../utils/apkNoticeSync';
+import { pushTabHistory, clearTabHistory } from '../utils/navigationStack';
 
 export function StudentPanel() {
   const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'ASSESSMENT' | 'PLANNER' | 'COURSES' | 'CHART' | 'LEADERBOARD' | 'NOTES' | 'MESSAGES' | 'PROFILE'>('ASSESSMENT');
+
+  useEffect(() => {
+    clearTabHistory('ASSESSMENT');
+  }, []);
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -148,7 +153,10 @@ export function StudentPanel() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    pushTabHistory(tab.id);
+                  }}
                   className={`relative flex flex-col sm:flex-row items-center gap-1 sm:gap-2 p-2 sm:px-5 sm:py-2.5 rounded-xl text-[10px] sm:text-sm font-bold transition-all flex-1 justify-center whitespace-nowrap ${
                     isActive 
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25 dark:bg-indigo-600' 

@@ -29,6 +29,17 @@ export function Login() {
   const [forgotRecoveryUser, setForgotRecoveryUser] = useState<{ name: string; eitaaUsername: string; roleName: string } | null>(null);
 
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState<boolean>(() => {
+    return localStorage.getItem('tahzib_remember_me') !== 'false';
+  });
+
+  // Restore remembered username on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('tahzib_saved_username');
+    if (saved) {
+      setUsername(saved);
+    }
+  }, []);
 
   // Eitaa MiniApp Auto-login state
   const [detectedEitaaUser, setDetectedEitaaUser] = useState<EitaaDetectedUser | null>(null);
@@ -180,9 +191,22 @@ const toEnglishDigits = (str: string): string => {
         );
       }
 
-      // If still not found, try syncing latest users from cloud server
+      // If still not found locally, try syncing latest users from cloud server
       if (!user) {
-        await syncMinIOData().catch(() => null);
+        if (!navigator.onLine) {
+          setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
+          return;
+        }
+
+        try {
+          await syncMinIOData();
+        } catch (syncErr: any) {
+          if (!navigator.onLine || syncErr?.message?.includes('fetch') || syncErr?.message?.includes('Network')) {
+            setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
+            return;
+          }
+        }
+
         const refreshedUsers = await db.users.toArray();
         user = refreshedUsers.find(
           u => u.username && (
@@ -211,6 +235,15 @@ const toEnglishDigits = (str: string): string => {
             return;
           }
 
+          // Save / Clear Remember Me preferences
+          if (rememberMe) {
+            localStorage.setItem('tahzib_remember_me', 'true');
+            localStorage.setItem('tahzib_saved_username', cleanUsername);
+          } else {
+            localStorage.setItem('tahzib_remember_me', 'false');
+            localStorage.removeItem('tahzib_saved_username');
+          }
+
           // If logged in while an Eitaa user was detected, auto-bind the Eitaa IDs!
           if (detectedEitaaUser) {
             const updates: Partial<User> = {};
@@ -231,10 +264,19 @@ const toEnglishDigits = (str: string): string => {
         }
       }
 
+      if (!navigator.onLine) {
+        setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
+        return;
+      }
+
       setError('نام کاربری یا رمز عبور اشتباه است.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
-      setError('خطا در ارتباط با پایگاه داده.');
+      if (!navigator.onLine || err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.message?.includes('network')) {
+        setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
+      } else {
+        setError('خطا در ارتباط با پایگاه داده.');
+      }
     }
   };
 
@@ -495,10 +537,23 @@ const toEnglishDigits = (str: string): string => {
                   </button>
                 </div>
               </div>
+
+              {/* Remember Me Checkbox */}
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer"
+                  />
+                  <span>مرا به خاطر بسپار</span>
+                </label>
+              </div>
               
               <button
                 type="submit"
-                className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 mt-6 cursor-pointer"
+                className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 mt-4 cursor-pointer"
               >
                 <LogIn className="w-5 h-5" />
                 ورود به سامانه

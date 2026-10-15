@@ -14,6 +14,8 @@ import { LiveUpdateChecker } from './components/common/LiveUpdateChecker';
 import { syncMinIOData } from './sync';
 import { syncApkNoticeForUser } from './utils/apkNoticeSync';
 import { UserProfileModal } from './components/common/UserProfileModal';
+import { ExitConfirmationModal } from './components/common/ExitConfirmationModal';
+import { setExitConfirmationListener, setExitConfirmationVisible, registerBackHandler } from './utils/navigationStack';
 
 const COLORS = [
   { id: 'indigo', label: 'نیلی (اصلی)', hex: '#4f46e5' },
@@ -31,6 +33,28 @@ export default function App() {
   const [themeColor, setThemeColor] = useState(() => localStorage.getItem('theme-color') || 'indigo');
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+
+  // Hook exit confirmation listener from navigationStack
+  useEffect(() => {
+    setExitConfirmationListener((visible) => {
+      setShowExitModal(visible);
+    });
+    return () => {
+      setExitConfirmationListener(null);
+    };
+  }, []);
+
+  // Intercept back button when profile modal is open
+  useEffect(() => {
+    if (showProfileModal) {
+      const unregister = registerBackHandler(() => {
+        setShowProfileModal(false);
+        return true;
+      });
+      return unregister;
+    }
+  }, [showProfileModal]);
 
   useEffect(() => {
     localStorage.setItem('theme-dark', isDark.toString());
@@ -212,6 +236,25 @@ export default function App() {
       <UserProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
+      />
+
+      <ExitConfirmationModal
+        isOpen={showExitModal}
+        onClose={() => {
+          setShowExitModal(false);
+          setExitConfirmationVisible(false);
+        }}
+        onConfirmExit={() => {
+          setShowExitModal(false);
+          setExitConfirmationVisible(false);
+          if (typeof window !== 'undefined' && (window as any).AndroidBridge?.closeApp) {
+            (window as any).AndroidBridge.closeApp();
+          } else if (typeof window !== 'undefined' && (window as any).Android?.closeApp) {
+            (window as any).Android.closeApp();
+          } else {
+            setCurrentUser(null);
+          }
+        }}
       />
     </div>
   );

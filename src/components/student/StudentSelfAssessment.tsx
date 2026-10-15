@@ -1431,7 +1431,7 @@ export function StudentSelfAssessment() {
           >
             <h3 className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
               <Smartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span>پایش و خوداظهاری میزان استفاده از گوشی (رفاه دیجیتال)</span>
+              <span>پایش گوشی</span>
             </h3>
             {expandedSection === 'screentime' ? <ChevronUp className="w-5 h-5 text-indigo-700 dark:text-indigo-300" /> : <ChevronDown className="w-5 h-5 text-indigo-700 dark:text-indigo-300" />}
           </button>

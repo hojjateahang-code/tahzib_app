@@ -7,7 +7,7 @@ import {
   Send, Mail, MessageSquare, User as UserIcon, Check, CheckCheck, Clock, 
   FileText, Search, PlusCircle, Paperclip, Image as ImageIcon, Film, Music, 
   File, Users, FolderPlus, Trash2, X, AlertCircle, ArrowRight, Megaphone, Eye,
-  Smartphone, Download, Copy
+  Smartphone, Download, Copy, Forward, Reply, ChevronDown, ChevronUp, CheckCircle2
 } from 'lucide-react';
 import { triggerSync } from '../../sync';
 import { FilePreviewModal } from '../common/FilePreviewModal';
@@ -20,6 +20,7 @@ import {
   markApkNoticeAsRead,
   isApkNoticeReadByUser
 } from '../../utils/apkNoticeSync';
+import { registerBackHandler } from '../../utils/navigationStack';
 
 const ROLE_LABELS: Record<Role, string> = {
   DIRECTOR: 'مدیر مدرسه',
@@ -88,6 +89,8 @@ export function MessagingCenter() {
     return map;
   }, [rawAllUsers]);
 
+  const activeContact = selectedChatUserId ? userMap.get(selectedChatUserId) : null;
+
   // Fetch all active non-deleted users for messaging contacts and selections (matching User Management list)
   const allUsers = useMemo(() => {
     if (!rawAllUsers) return [];
@@ -135,7 +138,9 @@ export function MessagingCenter() {
         return (
           m.senderId === currentUser.id || 
           m.recipientId === currentUser.id || 
-          (m.ccUserIds && m.ccUserIds.includes(currentUser.id))
+          (m.ccUserIds && m.ccUserIds.includes(currentUser.id)) ||
+          (m.referrals && m.referrals.some(r => r.toUserId === currentUser.id || r.fromUserId === currentUser.id || (r.ccUserIds && r.ccUserIds.includes(currentUser.id)))) ||
+          (m.replies && m.replies.some(r => r.authorId === currentUser.id))
         );
       }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     },
@@ -524,10 +529,164 @@ export function MessagingCenter() {
     );
   };
 
-  const activeContact = useMemo(() => {
-    if (!selectedChatUserId || !allUsers) return null;
-    return allUsers.find(u => u.id === selectedChatUserId) || null;
-  }, [selectedChatUserId, allUsers]);
+  // Administrative Automation: Referral & Reply States
+  const [showReferralModal, setShowReferralModal] = useState(false);
+  const [referralTargetMsg, setReferralTargetMsg] = useState<Message | null>(null);
+  const [referralToUserId, setReferralToUserId] = useState<string>('');
+  const [referralDirective, setReferralDirective] = useState<string>('جهت بررسی و اقدام مقتضی');
+  const [referralCustomNote, setReferralCustomNote] = useState<string>('');
+  const [referralCcUserIds, setReferralCcUserIds] = useState<string[]>([]);
+
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyTargetMsg, setReplyTargetMsg] = useState<Message | null>(null);
+  const [replyContent, setReplyContent] = useState<string>('');
+  const [replyAttachments, setReplyAttachments] = useState<MessageAttachment[]>([]);
+
+  // Accordion of Workflow History per message
+  const [expandedWorkflowMap, setExpandedWorkflowMap] = useState<Record<string, boolean>>({});
+
+  const toggleWorkflow = (msgId: string) => {
+    setExpandedWorkflowMap(prev => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  const handleOpenReferral = (msg: Message) => {
+    setReferralTargetMsg(msg);
+    setReferralToUserId('');
+    setReferralDirective('جهت بررسی و اقدام مقتضی');
+    setReferralCustomNote('');
+    setReferralCcUserIds([]);
+    setShowReferralModal(true);
+  };
+
+  const handleOpenReply = (msg: Message) => {
+    setReplyTargetMsg(msg);
+    setReplyContent('');
+    setReplyAttachments([]);
+    setShowReplyModal(true);
+  };
+
+  const handleToggleReferralCc = (userId: string) => {
+    setReferralCcUserIds(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  // Wire back-button navigation for Messaging modals
+  useEffect(() => {
+    if (showComposeModal) {
+      return registerBackHandler(() => {
+        setShowComposeModal(false);
+        return true;
+      });
+    }
+  }, [showComposeModal]);
+
+  useEffect(() => {
+    if (showReferralModal) {
+      return registerBackHandler(() => {
+        setShowReferralModal(false);
+        setReferralTargetMsg(null);
+        return true;
+      });
+    }
+  }, [showReferralModal]);
+
+  useEffect(() => {
+    if (showReplyModal) {
+      return registerBackHandler(() => {
+        setShowReplyModal(false);
+        setReplyTargetMsg(null);
+        return true;
+      });
+    }
+  }, [showReplyModal]);
+
+  useEffect(() => {
+    if (showGroupModal) {
+      return registerBackHandler(() => {
+        setShowGroupModal(false);
+        return true;
+      });
+    }
+  }, [showGroupModal]);
+
+  useEffect(() => {
+    if (showBulkChatModal) {
+      return registerBackHandler(() => {
+        setShowBulkChatModal(false);
+        return true;
+      });
+    }
+  }, [showBulkChatModal]);
+
+  useEffect(() => {
+    if (previewAttachment) {
+      return registerBackHandler(() => {
+        setPreviewAttachment(null);
+        return true;
+      });
+    }
+  }, [previewAttachment]);
+
+  const handleSubmitReferral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!referralTargetMsg || !referralToUserId || !currentUser) return;
+
+    const fullDirective = referralDirective === 'CUSTOM'
+      ? (referralCustomNote.trim() || 'جهت بررسی و اقدام مقتضی')
+      : (referralCustomNote.trim() ? `${referralDirective} - ${referralCustomNote.trim()}` : referralDirective);
+
+    const newReferral = {
+      id: crypto.randomUUID(),
+      fromUserId: currentUser.id,
+      toUserId: referralToUserId,
+      directiveNote: fullDirective,
+      date: new Date().toISOString(),
+      ccUserIds: referralCcUserIds
+    };
+
+    const existingReferrals = referralTargetMsg.referrals || [];
+    const updatedReferrals = [...existingReferrals, newReferral];
+
+    await db.messages.update(referralTargetMsg.id, {
+      referrals: updatedReferrals,
+      status: 'REFERRED',
+      updatedAt: Date.now()
+    });
+
+    // Also mark read for the referrer
+    await db.messages.update(referralTargetMsg.id, { isRead: true });
+
+    triggerSync();
+    setShowReferralModal(false);
+    setReferralTargetMsg(null);
+  };
+
+  const handleSubmitReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyTargetMsg || !replyContent.trim() || !currentUser) return;
+
+    const newReply = {
+      id: crypto.randomUUID(),
+      authorId: currentUser.id,
+      content: replyContent.trim(),
+      date: new Date().toISOString(),
+      attachments: replyAttachments
+    };
+
+    const existingReplies = replyTargetMsg.replies || [];
+    const updatedReplies = [...existingReplies, newReply];
+
+    await db.messages.update(replyTargetMsg.id, {
+      replies: updatedReplies,
+      status: 'ANSWERED',
+      updatedAt: Date.now()
+    });
+
+    triggerSync();
+    setShowReplyModal(false);
+    setReplyTargetMsg(null);
+  };
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto">
@@ -652,12 +811,20 @@ export function MessagingCenter() {
                 const recipient = userMap.get(msg.recipientId);
                 const isSentByMe = msg.senderId === currentUser?.id;
                 const isCc = msg.ccUserIds?.includes(currentUser?.id || '');
+                const myReferral = msg.referrals?.slice().reverse().find(r => r.toUserId === currentUser?.id);
+                const isReferredToMe = Boolean(myReferral);
+                const hasWorkflow = (msg.referrals && msg.referrals.length > 0) || (msg.replies && msg.replies.length > 0);
+                const isExpandedWorkflow = Boolean(expandedWorkflowMap[msg.id]);
 
                 return (
                   <div 
                     key={msg.id}
-                    className={`bg-white rounded-2xl p-6 border shadow-sm transition-all ${
-                      isCc ? 'border-amber-200 bg-amber-50/20' : 'border-slate-200 hover:border-slate-300'
+                    className={`bg-white dark:bg-slate-900 rounded-2xl p-6 border shadow-sm transition-all ${
+                      isReferredToMe 
+                        ? 'border-purple-300 dark:border-purple-800 bg-purple-50/20' 
+                        : isCc 
+                        ? 'border-amber-200 bg-amber-50/20' 
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-100 mb-4">
@@ -856,6 +1023,102 @@ export function MessagingCenter() {
                             </span>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* Administrative Automation Actions: Reply & Referral & Workflow */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Reply Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReply(msg)}
+                          className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-colors flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+                        >
+                          <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span>پاسخ به نامه</span>
+                        </button>
+
+                        {/* Referral Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReferral(msg)}
+                          className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-colors flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800 cursor-pointer"
+                        >
+                          <Forward className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>ارجاع نامه (هامش)</span>
+                        </button>
+                      </div>
+
+                      {hasWorkflow && (
+                        <button
+                          type="button"
+                          onClick={() => toggleWorkflow(msg.id)}
+                          className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-bold flex items-center gap-1 transition-colors px-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                        >
+                          <span>گردش مکاتبه و سوابق ({(msg.referrals?.length || 0) + (msg.replies?.length || 0)} اقدام)</span>
+                          {isExpandedWorkflow ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Expandable Workflow Audit Trail */}
+                    {hasWorkflow && isExpandedWorkflow && (
+                      <div className="mt-3 p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+                        <h5 className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>سوابق گردش کار، هامش‌ها و پاسخ‌های نامه:</span>
+                        </h5>
+
+                        <div className="space-y-3 border-r-2 border-indigo-200 dark:border-indigo-800 pr-3 mr-1">
+                          {/* 1. Original Letter Creation */}
+                          <div className="relative text-xs">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 absolute -right-[17px] top-1.5 ring-2 ring-white dark:ring-slate-900" />
+                            <div className="font-bold text-slate-700 dark:text-slate-300">
+                              ثبت اولیه نامه توسط: {userMap.get(msg.senderId)?.name || 'فرستنده'} به {userMap.get(msg.recipientId)?.name || 'گیرنده'}
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {new Date(msg.date).toLocaleDateString('fa-IR')} - {new Date(msg.date).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+
+                          {/* 2. Referrals in chronological order */}
+                          {(msg.referrals || []).map((ref, idx) => (
+                            <div key={ref.id || idx} className="relative text-xs">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -right-[17px] top-1.5 ring-2 ring-white dark:ring-slate-900" />
+                              <div className="font-bold text-emerald-800 dark:text-emerald-300">
+                                ارجاع از: {userMap.get(ref.fromUserId)?.name || 'مسئول'} به {userMap.get(ref.toUserId)?.name || 'مسئول مقصد'}
+                              </div>
+                              <div className="text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700 mt-1 font-medium">
+                                دستور / هامش: «{ref.directiveNote}»
+                              </div>
+                              {ref.ccUserIds && ref.ccUserIds.length > 0 && (
+                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                  رونوشت ارجاع: {ref.ccUserIds.map(cid => userMap.get(cid)?.name).filter(Boolean).join('، ')}
+                                </div>
+                              )}
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {new Date(ref.date).toLocaleDateString('fa-IR')} - {new Date(ref.date).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* 3. Replies */}
+                          {(msg.replies || []).map((rep, idx) => (
+                            <div key={rep.id || idx} className="relative text-xs">
+                              <span className="w-2 h-2 rounded-full bg-blue-500 absolute -right-[17px] top-1.5 ring-2 ring-white dark:ring-slate-900" />
+                              <div className="font-bold text-blue-800 dark:text-blue-300">
+                                پاسخ توسط: {userMap.get(rep.authorId)?.name || 'مسئول'} ({ROLE_LABELS[userMap.get(rep.authorId)?.role || 'STUDENT'] || ''})
+                              </div>
+                              <div className="text-slate-800 dark:text-slate-100 bg-blue-50/60 dark:bg-blue-950/40 p-2.5 rounded-lg border border-blue-200/60 dark:border-blue-800/60 mt-1 whitespace-pre-wrap leading-relaxed">
+                                {rep.content}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {new Date(rep.date).toLocaleDateString('fa-IR')} - {new Date(rep.date).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1607,6 +1870,197 @@ export function MessagingCenter() {
                   type="button"
                   onClick={() => setShowComposeModal(false)}
                   className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors"
+                >
+                  انصراف
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Referral Modal (اتوماسیون اداری - ارجاع و صدور هامش) */}
+      {showReferralModal && referralTargetMsg && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto" dir="rtl">
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-black text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Forward className="w-5 h-5 text-emerald-600" />
+                <span>ارجاع نامه و صدور دستور (هامش اداری)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowReferralModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold p-1 cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Letter Preview Brief */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 block">نامه در حال ارجاع:</span>
+              <h4 className="text-xs font-black text-slate-800 dark:text-slate-100">{referralTargetMsg.subject || 'بدون موضوع'}</h4>
+              <p className="text-[11px] text-slate-500 line-clamp-2">{referralTargetMsg.content}</p>
+            </div>
+
+            <form onSubmit={handleSubmitReferral} className="space-y-4">
+              {/* Recipient Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  ارجاع به مسئول / مخاطب جدید: <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={referralToUserId}
+                  onChange={e => setReferralToUserId(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- انتخاب مسئول ارجاع‌شونده --</option>
+                  {allUsers
+                    .filter(u => u.id !== currentUser?.id && !u.isDeleted)
+                    .map(u => (
+                      <option key={u.id} value={u.id}>
+                        {getUserDisplayName(u)} ({ROLE_LABELS[u.role] || u.role}) {u.role === 'STUDENT' ? ` - پایه ${u.base || 1}` : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Directive Presets */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  دستور / هامش ارجاع:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-2">
+                  {[
+                    'جهت بررسی و اقدام مقتضی',
+                    'جهت اعلام نظر و پاسخ به طلبه',
+                    'جهت استحضار و پیگیری',
+                    'جهت هماهنگی جلسه حضوری',
+                    'جهت بررسی انضباطی/تهذیبی',
+                    'CUSTOM'
+                  ].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setReferralDirective(preset)}
+                      className={`text-right px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
+                        referralDirective === preset
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 text-emerald-800 dark:text-emerald-200 font-black'
+                          : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {preset === 'CUSTOM' ? 'سایر (دستور سفارشی)' : preset}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  placeholder="توضیحات تکمیلی یا دستور اختصاصی شما..."
+                  value={referralCustomNote}
+                  onChange={e => setReferralCustomNote(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 resize-none h-20"
+                />
+              </div>
+
+              {/* CC Users Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  رونوشت به سایرین (جهت اطلاع):
+                </label>
+                <div className="max-h-32 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 rounded-xl space-y-1">
+                  {allUsers
+                    .filter(u => u.id !== currentUser?.id && u.id !== referralToUserId && !u.isDeleted)
+                    .map(u => (
+                      <label key={u.id} className="flex items-center gap-2 p-1 hover:bg-white dark:hover:bg-slate-700 rounded-lg cursor-pointer text-xs">
+                        <input
+                          type="checkbox"
+                          checked={referralCcUserIds.includes(u.id)}
+                          onChange={() => handleToggleReferralCc(u.id)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-slate-700 dark:text-slate-200 font-medium">
+                          {getUserDisplayName(u)} ({ROLE_LABELS[u.role] || u.role})
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  disabled={!referralToUserId}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-xs transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Forward className="w-4 h-4" />
+                  <span>ثبت و ابلاغ ارجاع</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReferralModal(false)}
+                  className="px-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  انصراف
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reply Modal (ثبت پاسخ به نامه اداری) */}
+      {showReplyModal && replyTargetMsg && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto" dir="rtl">
+            <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-black text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Reply className="w-5 h-5 text-indigo-600" />
+                <span>پاسخ رسمی به نامه اداری</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowReplyModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl font-bold p-1 cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Target Letter Brief */}
+            <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 mb-4 space-y-1">
+              <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 block">پاسخ به موضوع:</span>
+              <h4 className="text-xs font-black text-slate-800 dark:text-slate-100">{replyTargetMsg.subject || 'بدون موضوع'}</h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2">{replyTargetMsg.content}</p>
+            </div>
+
+            <form onSubmit={handleSubmitReply} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  متن پاسخ شما: <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  placeholder="متن پاسخ، تصمیم، موافقت/مخالفت یا راهنمایی خود را درج فرمایید..."
+                  value={replyContent}
+                  onChange={e => setReplyContent(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 resize-none h-32 leading-relaxed"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  disabled={!replyContent.trim()}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-xs transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Reply className="w-4 h-4" />
+                  <span>ارسال پاسخ رسمی</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowReplyModal(false)}
+                  className="px-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-xl font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   انصراف
                 </button>

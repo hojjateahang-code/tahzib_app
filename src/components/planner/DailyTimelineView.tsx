@@ -327,32 +327,30 @@ export function DailyTimelineView({
   // Calculate percentage of current time across the 24 hours (1440 minutes)
   const currentProgressPercent = Math.min(100, Math.max(0, (currentTotalMinutes / 1440) * 100));
 
-  // Auto-scroll timeline to current time
+  // Auto-scroll timeline to current time - brings vertical time line directly into frame
   const handleScrollToNow = () => {
     if (!timelineScrollContainerRef.current) return;
-    const container = timelineScrollContainerRef.current;
-    const totalScrollWidth = container.scrollWidth;
-    const clientWidth = container.clientWidth;
-
-    if (timelineDirection === 'rtl') {
-      // In RTL, scrollLeft can be 0 at rightmost edge or negative in some browsers
-      const targetScroll = ((100 - currentProgressPercent) / 100) * totalScrollWidth - clientWidth / 2;
-      container.scrollTo({ left: targetScroll, behavior: 'smooth' });
-    } else {
-      const targetScroll = (currentProgressPercent / 100) * totalScrollWidth - clientWidth / 2;
-      container.scrollTo({ left: targetScroll, behavior: 'smooth' });
+    const hourSlot = document.getElementById(`timeline-hour-${currentHour}`);
+    if (hourSlot) {
+      hourSlot.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      return;
+    }
+    if (verticalIndicatorRef.current) {
+      verticalIndicatorRef.current.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }
   };
 
-  // Auto-scroll once when today is loaded
+  // Auto-scroll to center current time line on mount and date changes
   useEffect(() => {
     if (isViewingToday) {
-      const timer = setTimeout(() => {
-        handleScrollToNow();
-      }, 350);
-      return () => clearTimeout(timer);
+      const timer1 = setTimeout(() => handleScrollToNow(), 150);
+      const timer2 = setTimeout(() => handleScrollToNow(), 600);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
     }
-  }, [currentDateStr, isViewingToday]);
+  }, [currentDateStr, isViewingToday, isCompactTimeline, timelineDirection]);
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -628,8 +626,8 @@ export function DailyTimelineView({
           className="mt-4 overflow-x-auto pb-4 pt-2 relative select-none scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700"
           style={{ direction: timelineDirection }}
         >
-          {/* Minimum width guarantees each hour has at least 110px space to show full plan titles */}
-          <div className="relative min-w-[2640px]">
+          {/* Minimum width adapts: compact mode fits much more in view (1500px), standard gives full roomy cards (2880px) */}
+          <div className={`relative transition-all duration-300 ${isCompactTimeline ? 'min-w-[1500px]' : 'min-w-[2880px]'}`}>
             {/* DYNAMIC MOVING VERTICAL INDICATOR LINE (LINE CUTTING ACROSS HOURS & TASKS) */}
             {isViewingToday && (
               <div 
@@ -661,7 +659,7 @@ export function DailyTimelineView({
             )}
 
             {/* 24-Hour Grid Columns Header */}
-            <div className="grid grid-cols-24 gap-2 mb-2">
+            <div className={`grid grid-cols-24 transition-all duration-300 ${isCompactTimeline ? 'gap-1 mb-1' : 'gap-2 mb-2'}`}>
               {HOURS.map((hour) => {
                 const isCurrent = isViewingToday && hour === currentHour;
                 const isPast = isViewingToday && hour < currentHour;
@@ -672,7 +670,8 @@ export function DailyTimelineView({
                 return (
                   <div
                     key={`header-${hour}`}
-                    className={`rounded-2xl p-2.5 border text-center transition-all ${
+                    id={`timeline-hour-${hour}`}
+                    className={`rounded-2xl border text-center transition-all ${isCompactTimeline ? 'p-1.5' : 'p-2.5'} ${
                       isCurrent
                         ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-400 dark:border-amber-600 ring-2 ring-amber-400/50 shadow-sm'
                         : isPast
@@ -680,19 +679,19 @@ export function DailyTimelineView({
                         : 'bg-slate-50 dark:bg-slate-850 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-1 mb-1">
-                      <span className="font-mono font-black text-xs">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className={`font-mono font-black ${isCompactTimeline ? 'text-[10px]' : 'text-xs'}`}>
                         {String(hour).padStart(2, '0')}:00
                       </span>
                       {period && (
-                        <PeriodIcon className={`w-3.5 h-3.5 ${isCurrent ? 'text-amber-600' : 'text-slate-400'}`} />
+                        <PeriodIcon className={`${isCompactTimeline ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5'} ${isCurrent ? 'text-amber-600' : 'text-slate-400'}`} />
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400">
                       <span className="truncate">{period ? period.label : 'ساعت'}</span>
                       {itemsCount > 0 ? (
-                        <span className="px-1.5 py-0.2 rounded-full font-black text-[9px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                        <span className="px-1 py-0.1 rounded-full font-black text-[8px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
                           {itemsCount}
                         </span>
                       ) : (
@@ -705,7 +704,7 @@ export function DailyTimelineView({
             </div>
 
             {/* 24-Hour Slots Content Matrix: Direct Display of Registered Tasks */}
-            <div className="grid grid-cols-24 gap-2">
+            <div className={`grid grid-cols-24 transition-all duration-300 ${isCompactTimeline ? 'gap-1' : 'gap-2'}`}>
               {HOURS.map((hour) => {
                 const hourItems = getItemsStartingInHour(hour);
                 const isCurrent = isViewingToday && hour === currentHour;
@@ -714,7 +713,8 @@ export function DailyTimelineView({
                 return (
                   <div
                     key={`slot-${hour}`}
-                    className={`rounded-2xl border p-2 min-h-[170px] flex flex-col justify-between transition-all ${
+                    id={`timeline-slot-${hour}`}
+                    className={`rounded-2xl border transition-all ${isCompactTimeline ? 'p-1.5 min-h-[110px]' : 'p-2 min-h-[170px]'} flex flex-col justify-between ${
                       isCurrent
                         ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/60 ring-1 ring-amber-300/40'
                         : isPast

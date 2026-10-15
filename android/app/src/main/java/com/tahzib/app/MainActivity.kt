@@ -194,11 +194,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            super.onBackPressed()
+        webView.evaluateJavascript("(function(){ return window.handleAndroidBack ? window.handleAndroidBack() : false; })();") { result ->
+            val handled = result == "true" || result == "\"true\""
+            if (!handled) {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    showNativeExitConfirmation()
+                }
+            }
         }
+    }
+
+    private fun showNativeExitConfirmation() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("خروج از برنامه")
+            .setMessage("آیا می‌خواهید از برنامه خارج شوید؟")
+            .setPositiveButton("خروج از برنامه") { _, _ ->
+                super.onBackPressed()
+            }
+            .setNegativeButton("انصراف", null)
+            .show()
     }
 
     /**

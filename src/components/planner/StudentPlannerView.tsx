@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -26,6 +26,7 @@ import { FixedWeeklyRoutineView } from './FixedWeeklyRoutineView';
 import { AddPlannerItemModal, SCHOOL_RECOMMENDED_PRESETS } from './AddPlannerItemModal';
 import { PlannerReminderNotifier } from './PlannerReminderNotifier';
 import { ClearPlannerModal, type ClearScope } from './ClearPlannerModal';
+import { registerBackHandler } from '../../utils/navigationStack';
 
 export function StudentPlannerView() {
   const { currentUser } = useAuth();
@@ -44,6 +45,26 @@ export function StudentPlannerView() {
   const [modalDate, setModalDate] = useState<string>(currentDateStr);
   const [modalHour, setModalHour] = useState<number | undefined>(undefined);
   const [editingItem, setEditingItem] = useState<PlannerItem | null>(null);
+
+  // Wire back button to close planner modals
+  useEffect(() => {
+    if (isAddModalOpen) {
+      return registerBackHandler(() => {
+        setIsAddModalOpen(false);
+        setEditingItem(null);
+        return true;
+      });
+    }
+  }, [isAddModalOpen]);
+
+  useEffect(() => {
+    if (isGlobalClearModalOpen) {
+      return registerBackHandler(() => {
+        setIsGlobalClearModalOpen(false);
+        return true;
+      });
+    }
+  }, [isGlobalClearModalOpen]);
 
   // Live Query for Planner Items of current student
   const plannerItems = useLiveQuery(

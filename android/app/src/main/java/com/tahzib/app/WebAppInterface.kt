@@ -44,6 +44,49 @@ class WebAppInterface(private val mContext: Context) {
     }
 
     /**
+     * استخراج چندروزه آمار پایش گوشی (امروز و روزهای گذشته تا ۷ یا ۱۴ روز)
+     */
+    @JavascriptInterface
+    fun getMultiDayAppUsageStats(days: Int): String {
+        val count = if (days <= 0) 7 else days
+        val multiDayList = getMultiDayAppUsageStats(mContext, count)
+        val jsonArray = JSONArray()
+
+        for (report in multiDayList) {
+            val dayObj = JSONObject()
+            dayObj.put("date", report.date)
+            dayObj.put("totalMinutes", report.totalMinutes)
+            dayObj.put("nightMinutes", report.nightMinutes)
+
+            val appsArray = JSONArray()
+            for (info in report.apps) {
+                val appObj = JSONObject()
+                appObj.put("packageName", info.packageName)
+                appObj.put("appName", info.appName)
+                appObj.put("usageTimeMillis", info.usageTimeMillis)
+                appObj.put("nightUsageMillis", info.nightUsageMillis)
+                appsArray.put(appObj)
+            }
+            dayObj.put("apps", appsArray)
+            jsonArray.put(dayObj)
+        }
+
+        return jsonArray.toString()
+    }
+
+    /**
+     * بستن امن برنامه در اندروید پس از تایید کاربر
+     */
+    @JavascriptInterface
+    fun closeApp() {
+        if (mContext is MainActivity) {
+            mContext.runOnUiThread {
+                mContext.finish()
+            }
+        }
+    }
+
+    /**
      * ۴. دریافت آدرس پیش‌فرض سرور اصلی اینترنتی سامانه جهت اتصال APIها
      */
     @JavascriptInterface

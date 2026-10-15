@@ -222,6 +222,23 @@ export interface MessageAttachment {
   size?: string;
 }
 
+export interface MessageReferral {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  directiveNote: string; // هامش یا دستور ارجاع
+  date: string; // ISO String
+  ccUserIds?: string[];
+}
+
+export interface MessageReply {
+  id: string;
+  authorId: string;
+  content: string;
+  date: string;
+  attachments?: MessageAttachment[];
+}
+
 export interface Message extends BaseEntity {
   id: string;
   senderId: string;
@@ -234,6 +251,11 @@ export interface Message extends BaseEntity {
   date: string; // ISO String
   isRead?: boolean;
   synced?: boolean;
+  // Administrative Automation additions:
+  parentMessageId?: string;
+  referrals?: MessageReferral[];
+  replies?: MessageReply[];
+  status?: 'PENDING' | 'IN_PROGRESS' | 'REFERRED' | 'ANSWERED' | 'ARCHIVED';
 }
 
 export type PlannerCategory = 
