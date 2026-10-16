@@ -6,6 +6,9 @@ import { Bell, Mail, UserPlus, FileText, CheckSquare, AlertCircle, X, CheckCheck
 import { triggerSync } from '../../sync';
 import { getTodayDateStr, isSameDay, isAssessmentSubmitted } from '../../utils/assessmentUtils';
 import { isApkDownloadMessage, getCachedApkNoticeStatus, isApkNoticeReadByUser, markApkNoticeAsRead } from '../../utils/apkNoticeSync';
+import { getActiveCompetitionRound, CompetitionRound } from '../../utils/competitionRoundManager';
+import { calculateStudentScoreSinceDate } from '../../utils/scoringSystem';
+import { formatJalali } from '../../utils/date';
 
 interface Props {
   currentUser: User;
@@ -26,6 +29,7 @@ export interface NotificationItem {
 
 export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeCompetitionRound, setActiveCompetitionRound] = useState<CompetitionRound | null>(() => getActiveCompetitionRound());
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(`dismissed_notifs_${currentUser.id}`);
@@ -36,12 +40,24 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
   });
 
   useEffect(() => {
+    const handleRoundChanged = (e: any) => {
+      setActiveCompetitionRound(e.detail as CompetitionRound | null);
+    };
+    window.addEventListener('COMPETITION_ROUND_CHANGED', handleRoundChanged);
+    return () => window.removeEventListener('COMPETITION_ROUND_CHANGED', handleRoundChanged);
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(`dismissed_notifs_${currentUser.id}`, JSON.stringify(dismissedIds));
     } catch {
       // ignore
     }
   }, [dismissedIds, currentUser.id]);
+
+  // Live queries for score calculation in competition round
+  const allAssessments = useLiveQuery(() => db.assessments.toArray(), []);
+  const allNotes = useLiveQuery(() => db.privateNotes.toArray(), []);
 
   // Fetch unread messages specifically for currentUser
   const unreadMessages = useLiveQuery(
@@ -256,11 +272,65 @@ export function NotificationCenter({ currentUser, onNavigateTab }: Props) {
       });
     }
 
+    // 7. Active Competition Round Score Announcement
+    if (activeCompetitionRound && activeCompetitionRound.isActive && activeCompetitionRound.showInAnnouncements) {
+      const startFa = formatJalali(activeCompetitionRound.startDate);
+      if (currentUser.role === 'STUDENT' && allAssessments) {
+        const scoreData = calculateStudentScoreSinceDate(
+          currentUser.id,
+          activeCompetitionRound.startDate,
+          allAssessments,
+          allNotes || [],
+          undefined,
+          undefined,
+          undefined,
+          activeCompetitionRound.endDate
+        );
+
+        list.push({
+          id: `comp-round-${activeCompetitionRound.id}-${currentUser.id}`,
+          type: 'TASK',
+          title: `🏆 اعلان دور مسابقه: ${activeCompetitionRound.title}`,
+          description: activeCompetitionRound.customAnnouncementText
+            ? `${activeCompetitionRound.customAnnouncementText} (امتیاز شما از ${startFa}: ${scoreData.periodScore.toLocaleString('fa-IR')} امتیاز)`
+            : `امتیاز شما از تاریخ ${startFa} تا کنون: ${scoreData.periodScore.toLocaleString('fa-IR')} امتیاز. برای مشاهده رتبه‌بندی کلیک کنید.`,
+          date: activeCompetitionRound.createdAt || new Date().toISOString(),
+          isRead: false,
+          linkTab: 'LEADERBOARD',
+          targetId: activeCompetitionRound.id
+        });
+      } else if (currentUser.role !== 'STUDENT') {
+        list.push({
+          id: `comp-round-staff-${activeCompetitionRound.id}`,
+          type: 'TASK',
+          title: `🏆 دور مسابقه فعال: ${activeCompetitionRound.title}`,
+          description: `محاسبه و نمایش امتیازات از تاریخ ${startFa} به بعد برای همه طلاب در حال اجرا است.`,
+          date: activeCompetitionRound.createdAt || new Date().toISOString(),
+          isRead: false,
+          linkTab: 'LEADERBOARD',
+          targetId: activeCompetitionRound.id
+        });
+      }
+    }
+
     // Filter out dismissed items
     return list
       .filter(n => !dismissedIds.includes(n.id))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [unreadMessages, pendingUsers, consultStudents, pendingTasks, todayAssessmentSubmitted, studentAppointments, allUsers, currentUser.role, dismissedIds]);
+  }, [
+    unreadMessages, 
+    pendingUsers, 
+    consultStudents, 
+    pendingTasks, 
+    todayAssessmentSubmitted, 
+    studentAppointments, 
+    allUsers, 
+    currentUser.role, 
+    dismissedIds,
+    activeCompetitionRound,
+    allAssessments,
+    allNotes
+  ]);
 
   const totalCount = notifications.length;
 

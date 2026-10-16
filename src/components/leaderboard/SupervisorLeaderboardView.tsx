@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -12,8 +12,15 @@ import {
   DEFAULT_SCORE_WEIGHTS, 
   LEVEL_DEFINITIONS,
   StudentScoreProfile,
-  ScoreWeights
+  ScoreWeights,
+  LeaderboardPeriod
 } from '../../utils/scoringSystem';
+import { formatJalali } from '../../utils/date';
+import { 
+  getActiveCompetitionRound, 
+  CompetitionRound 
+} from '../../utils/competitionRoundManager';
+import { CompetitionRoundModal } from './CompetitionRoundModal';
 
 interface Props {
   role?: 'VICE_PRINCIPAL' | 'MENTOR' | 'DIRECTOR' | 'TECH_ADMIN';
@@ -24,13 +31,33 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
   const { currentUser } = useAuth();
   const effectiveRole = role || currentUser?.role || 'VICE_PRINCIPAL';
 
-  const [period, setPeriod] = useState<'ALL' | 'MONTH' | 'WEEK'>('ALL');
+  const [activeCompetitionRound, setActiveCompetitionRound] = useState<CompetitionRound | null>(() => getActiveCompetitionRound());
+  const [period, setPeriod] = useState<LeaderboardPeriod>('ALL');
+  const [customStartDate, setCustomStartDate] = useState<string | null>(null);
+  const [customRoundTitle, setCustomRoundTitle] = useState<string | null>(null);
+  const [showCompetitionModal, setShowCompetitionModal] = useState(false);
+
   const [selectedBase, setSelectedBase] = useState<number | 'ALL'>(defaultBaseFilter || 'ALL');
   const [selectedMentorId, setSelectedMentorId] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProfile, setSelectedProfile] = useState<StudentScoreProfile | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [weights, setWeights] = useState<ScoreWeights>(DEFAULT_SCORE_WEIGHTS);
+
+  // Listen for competition round changes
+  useEffect(() => {
+    const handleRoundChange = (e: any) => {
+      const round = e.detail as CompetitionRound | null;
+      setActiveCompetitionRound(round);
+      if (round && round.isActive) {
+        setPeriod('COMPETITION_ROUND');
+        setCustomStartDate(round.startDate);
+        setCustomRoundTitle(round.title);
+      }
+    };
+    window.addEventListener('COMPETITION_ROUND_CHANGED', handleRoundChange);
+    return () => window.removeEventListener('COMPETITION_ROUND_CHANGED', handleRoundChange);
+  }, []);
 
   // Live queries
   const allUsers = useLiveQuery(() => db.users.toArray(), []) || [];
@@ -45,11 +72,20 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
     return allUsers.filter(u => (u.role === 'MENTOR' || u.role === 'COUNSELOR') && !u.isDeleted);
   }, [allUsers]);
 
-  // Compute leaderboard
+  // Compute leaderboard with potential custom cutoff date
   const rawLeaderboard = useMemo(() => {
     if (students.length === 0) return [];
-    return calculateLeaderboard(students, assessments, notes, period, weights);
-  }, [students, assessments, notes, period, weights]);
+    return calculateLeaderboard(
+      students, 
+      assessments, 
+      notes, 
+      period, 
+      weights, 
+      [], 
+      [], 
+      customStartDate || undefined
+    );
+  }, [students, assessments, notes, period, weights, customStartDate]);
 
   // Mentors only see their own assigned students by default, unless they choose all
   const filteredProfiles = useMemo(() => {
@@ -164,6 +200,15 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
           <button
             type="button"
+            onClick={() => setShowCompetitionModal(true)}
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+          >
+            <Trophy className="w-4 h-4 text-slate-950" />
+            <span>دوره‌های مسابقه و اعلان امتیازات</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowConfigModal(true)}
             className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-white/20 cursor-pointer shadow-xs"
           >
@@ -243,36 +288,86 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl text-xs font-bold overflow-x-auto">
           <button
             type="button"
-            onClick={() => setPeriod('ALL')}
+            onClick={() => {
+              setPeriod('ALL');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-              period === 'ALL'
+              period === 'ALL' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
-                : 'text-slate-600 dark:text-slate-400'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
             کل دوره
           </button>
+
           <button
             type="button"
-            onClick={() => setPeriod('MONTH')}
+            onClick={() => {
+              setPeriod('MONTH');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-              period === 'MONTH'
+              period === 'MONTH' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
-                : 'text-slate-600 dark:text-slate-400'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
             ۳۰ روز اخیر
           </button>
+
           <button
             type="button"
-            onClick={() => setPeriod('WEEK')}
+            onClick={() => {
+              setPeriod('WEEK');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-              period === 'WEEK'
+              period === 'WEEK' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
-                : 'text-slate-600 dark:text-slate-400'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
             ۷ روز اخیر
+          </button>
+
+          {activeCompetitionRound && activeCompetitionRound.isActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setPeriod('COMPETITION_ROUND');
+                setCustomStartDate(activeCompetitionRound.startDate);
+                setCustomRoundTitle(activeCompetitionRound.title);
+              }}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                period === 'COMPETITION_ROUND' || (customStartDate === activeCompetitionRound.startDate)
+                  ? 'bg-amber-600 text-white shadow-xs font-black'
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-500" />
+              <span>دور مسابقه: {activeCompetitionRound.title}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowCompetitionModal(true)}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              customStartDate && (!activeCompetitionRound || customStartDate !== activeCompetitionRound.startDate)
+                ? 'bg-emerald-600 text-white shadow-xs font-black'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>
+              {customStartDate && (!activeCompetitionRound || customStartDate !== activeCompetitionRound.startDate)
+                ? `از تاریخ: ${formatJalali(customStartDate)}`
+                : 'از تاریخ دلخواه...'}
+            </span>
           </button>
         </div>
 
@@ -317,6 +412,48 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Active Cutoff / Competition Round Alert Banner */}
+      {customStartDate && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-400/50 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs flex-wrap shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
+            <div className="p-1.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl">
+              <Trophy className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-black text-amber-900 dark:text-amber-200">
+                مبنای محاسبه و لحاظ امتیازات: از تاریخ {formatJalali(customStartDate)} به بعد
+              </span>
+              {customRoundTitle && (
+                <span className="text-[11px] text-amber-700 dark:text-amber-300 block mt-0.5">
+                  عنوان دوره: «{customRoundTitle}»
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCompetitionModal(true)}
+              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 rounded-xl font-black transition-all cursor-pointer"
+            >
+              تنظیم دوره / تغییر تاریخ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCustomStartDate(null);
+                setCustomRoundTitle(null);
+                setPeriod('ALL');
+              }}
+              className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-all cursor-pointer"
+            >
+              بازگشت به کل دوره
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Leaderboard Table */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
@@ -654,6 +791,22 @@ export function SupervisorLeaderboardView({ role, defaultBaseFilter }: Props) {
           </div>
         </div>
       )}
+
+      {/* Competition Round & Score Cutoff Modal */}
+      <CompetitionRoundModal
+        isOpen={showCompetitionModal}
+        onClose={() => setShowCompetitionModal(false)}
+        currentUser={currentUser!}
+        allUsers={allUsers}
+        assessments={assessments}
+        notes={notes}
+        weights={weights}
+        onApplyCustomFilter={(sDate, rTitle) => {
+          setPeriod('CUSTOM');
+          setCustomStartDate(sDate);
+          setCustomRoundTitle(rTitle || null);
+        }}
+      />
 
     </div>
   );

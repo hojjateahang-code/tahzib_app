@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../store';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
@@ -6,23 +6,47 @@ import {
   Trophy, Medal, Flame, Sparkles, Star, ChevronDown, 
   HelpCircle, Search, ShieldCheck, Award, ArrowUpRight,
   TrendingUp, Users, Calendar, Moon, Smartphone, CheckCircle2,
-  BookOpen, HeartHandshake, Eye, X
+  BookOpen, HeartHandshake, Eye, X, Filter
 } from 'lucide-react';
 import { 
   calculateLeaderboard, 
   LEVEL_DEFINITIONS, 
   DEFAULT_SCORE_WEIGHTS,
-  StudentScoreProfile 
+  StudentScoreProfile,
+  LeaderboardPeriod
 } from '../../utils/scoringSystem';
+import { formatJalali } from '../../utils/date';
+import { getActiveCompetitionRound, CompetitionRound } from '../../utils/competitionRoundManager';
+import { gregorianToJalali, jalaliToGregorian, JALALI_MONTH_NAMES } from '../../utils/shamsiCalendar';
 import { GraduationCap } from 'lucide-react';
 
 export function StudentLeaderboardView() {
   const { currentUser } = useAuth();
-  const [period, setPeriod] = useState<'ALL' | 'MONTH' | 'WEEK'>('ALL');
+  const [activeRound, setActiveRound] = useState<CompetitionRound | null>(() => getActiveCompetitionRound());
+  const [period, setPeriod] = useState<LeaderboardPeriod>('ALL');
+  const [customStartDate, setCustomStartDate] = useState<string | null>(null);
+  const [customRoundTitle, setCustomRoundTitle] = useState<string | null>(null);
+  const [showStudentDateModal, setShowStudentDateModal] = useState(false);
+
   const [baseFilter, setBaseFilter] = useState<'ALL' | 'MY_BASE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [selectedProfileModal, setSelectedProfileModal] = useState<StudentScoreProfile | null>(null);
+
+  // Listen for competition round changes
+  useEffect(() => {
+    const handleRoundChange = (e: any) => {
+      const r = e.detail as CompetitionRound | null;
+      setActiveRound(r);
+      if (r && r.isActive) {
+        setPeriod('COMPETITION_ROUND');
+        setCustomStartDate(r.startDate);
+        setCustomRoundTitle(r.title);
+      }
+    };
+    window.addEventListener('COMPETITION_ROUND_CHANGED', handleRoundChange);
+    return () => window.removeEventListener('COMPETITION_ROUND_CHANGED', handleRoundChange);
+  }, []);
 
   // Live queries
   const students = useLiveQuery(() => db.users.where('role').equals('STUDENT').toArray(), []);
@@ -31,7 +55,7 @@ export function StudentLeaderboardView() {
   const enrollments = useLiveQuery(() => db.studentCourseEnrollments.toArray(), []);
   const programs = useLiveQuery(() => db.tahzibPrograms.toArray(), []);
 
-  // Compute full leaderboard
+  // Compute full leaderboard with possible cutoff date
   const fullLeaderboard = useMemo(() => {
     if (!students || !assessments) return [];
     return calculateLeaderboard(
@@ -41,9 +65,10 @@ export function StudentLeaderboardView() {
       period, 
       DEFAULT_SCORE_WEIGHTS, 
       enrollments || [], 
-      programs || []
+      programs || [],
+      customStartDate || undefined
     );
-  }, [students, assessments, notes, period, enrollments, programs]);
+  }, [students, assessments, notes, period, enrollments, programs, customStartDate]);
 
   // Current user's profile
   const myProfile = useMemo(() => {
@@ -201,9 +226,13 @@ export function StudentLeaderboardView() {
         <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl overflow-x-auto text-xs font-bold">
           <button
             type="button"
-            onClick={() => setPeriod('ALL')}
+            onClick={() => {
+              setPeriod('ALL');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              period === 'ALL'
+              period === 'ALL' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
@@ -214,9 +243,13 @@ export function StudentLeaderboardView() {
 
           <button
             type="button"
-            onClick={() => setPeriod('MONTH')}
+            onClick={() => {
+              setPeriod('MONTH');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              period === 'MONTH'
+              period === 'MONTH' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
@@ -227,15 +260,55 @@ export function StudentLeaderboardView() {
 
           <button
             type="button"
-            onClick={() => setPeriod('WEEK')}
+            onClick={() => {
+              setPeriod('WEEK');
+              setCustomStartDate(null);
+              setCustomRoundTitle(null);
+            }}
             className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              period === 'WEEK'
+              period === 'WEEK' && !customStartDate
                 ? 'bg-indigo-600 text-white shadow-xs font-black'
                 : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
             <span>۷ روز اخیر (هفتگی)</span>
+          </button>
+
+          {activeRound && activeRound.isActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setPeriod('COMPETITION_ROUND');
+                setCustomStartDate(activeRound.startDate);
+                setCustomRoundTitle(activeRound.title);
+              }}
+              className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                period === 'COMPETITION_ROUND' || (customStartDate === activeRound.startDate)
+                  ? 'bg-amber-600 text-white shadow-xs font-black'
+                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-500" />
+              <span>دور مسابقه: {activeRound.title}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowStudentDateModal(true)}
+            className={`px-4 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              customStartDate && (!activeRound || customStartDate !== activeRound.startDate)
+                ? 'bg-emerald-600 text-white shadow-xs font-black'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>
+              {customStartDate && (!activeRound || customStartDate !== activeRound.startDate)
+                ? `از تاریخ: ${formatJalali(customStartDate)}`
+                : 'از تاریخ دلخواه...'}
+            </span>
           </button>
         </div>
 
@@ -278,6 +351,48 @@ export function StudentLeaderboardView() {
           </div>
         </div>
       </div>
+
+      {/* Active Cutoff / Competition Round Alert Banner */}
+      {customStartDate && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/15 border border-amber-400/50 p-4 rounded-2xl flex items-center justify-between gap-3 text-xs flex-wrap shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2.5 text-amber-950 dark:text-amber-200">
+            <div className="p-1.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl">
+              <Trophy className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-black text-amber-900 dark:text-amber-200">
+                امتیازات از تاریخ {formatJalali(customStartDate)} تا کنون لحاظ شده است
+              </span>
+              {customRoundTitle && (
+                <span className="text-[11px] text-amber-700 dark:text-amber-300 block mt-0.5">
+                  دور مسابقه: «{customRoundTitle}»
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowStudentDateModal(true)}
+              className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-200 rounded-xl font-black transition-all cursor-pointer"
+            >
+              تغییر تاریخ مبدأ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCustomStartDate(null);
+                setCustomRoundTitle(null);
+                setPeriod('ALL');
+              }}
+              className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-all cursor-pointer"
+            >
+              بازگشت به کل دوره
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Top 3 Podium Cards (سکوی افتخار) */}
       {topThree.length > 0 && !searchQuery && (
@@ -700,6 +815,216 @@ export function StudentLeaderboardView() {
         </div>
       )}
 
+      {/* Student Custom Date Selector Modal */}
+      {showStudentDateModal && (
+        <StudentCustomDateSelectorModal
+          isOpen={showStudentDateModal}
+          onClose={() => setShowStudentDateModal(false)}
+          currentCutoff={customStartDate}
+          onApply={(dateIso, title) => {
+            setPeriod('CUSTOM');
+            setCustomStartDate(dateIso);
+            setCustomRoundTitle(title);
+            setShowStudentDateModal(false);
+          }}
+        />
+      )}
+
+    </div>
+  );
+}
+
+interface StudentDateModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentCutoff: string | null;
+  onApply: (dateIso: string, title?: string) => void;
+}
+
+function StudentCustomDateSelectorModal({ isOpen, onClose, currentCutoff, onApply }: StudentDateModalProps) {
+  const [jy, setJy] = useState<number>(1405);
+  const [jm, setJm] = useState<number>(1);
+  const [jd, setJd] = useState<number>(1);
+
+  useEffect(() => {
+    if (currentCutoff) {
+      try {
+        const parts = currentCutoff.split('-');
+        const g = gregorianToJalali(parseInt(parts[0], 10), parseInt(parts[1], 10), parseInt(parts[2], 10));
+        setJy(g.jy);
+        setJm(g.jm);
+        setJd(g.jd);
+        return;
+      } catch {
+        // ignore
+      }
+    }
+    const now = new Date();
+    const g = gregorianToJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    setJy(g.jy);
+    setJm(g.jm);
+    setJd(g.jd);
+  }, [currentCutoff, isOpen]);
+
+  const setPreset = (preset: 'TODAY' | 'WEEK_START' | 'MONTH_START' | '14_DAYS_AGO' | '30_DAYS_AGO') => {
+    const now = new Date();
+    let target = new Date();
+
+    if (preset === 'TODAY') {
+      target = now;
+    } else if (preset === '14_DAYS_AGO') {
+      target.setDate(now.getDate() - 14);
+    } else if (preset === '30_DAYS_AGO') {
+      target.setDate(now.getDate() - 30);
+    } else if (preset === 'MONTH_START') {
+      const curJ = gregorianToJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      const g = jalaliToGregorian(curJ.jy, curJ.jm, 1);
+      target = new Date(g.gy, g.gm - 1, g.gd);
+    } else if (preset === 'WEEK_START') {
+      const day = now.getDay();
+      const diff = day === 6 ? 0 : (day + 1);
+      target.setDate(now.getDate() - diff);
+    }
+
+    const j = gregorianToJalali(target.getFullYear(), target.getMonth() + 1, target.getDate());
+    setJy(j.jy);
+    setJm(j.jm);
+    setJd(j.jd);
+  };
+
+  const handleConfirm = () => {
+    try {
+      const g = jalaliToGregorian(jy, jm, jd);
+      const iso = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}`;
+      onApply(iso, `از تاریخ ${jd} ${JALALI_MONTH_NAMES[jm]}`);
+    } catch {
+      alert('تاریخ نامعتبر است.');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+      <div 
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden text-right"
+        dir="rtl"
+      >
+        <div className="p-4 bg-gradient-to-r from-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-400" />
+            <h4 className="font-black text-sm">محاسبه امتیازات از تاریخ دلخواه به بعد</h4>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg text-slate-300">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 text-xs">
+          <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+            تاریخ مبدأ مورد نظر خود را انتخاب نمایید تا کلیه امتیازات کسب‌شده، رتبه و کارنامه شما دقیقاً از این تاریخ به بعد محاسبه گردد:
+          </p>
+
+          {/* Quick Presets */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] text-slate-400 font-bold ml-1">انتخاب سریع:</span>
+            <button
+              type="button"
+              onClick={() => setPreset('TODAY')}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+            >
+              امروز
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('WEEK_START')}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+            >
+              شنبه این هفته
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('MONTH_START')}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+            >
+              اول این ماه
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('14_DAYS_AGO')}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+            >
+              ۱۴ روز قبل
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('30_DAYS_AGO')}
+              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+            >
+              ۳۰ روز قبل
+            </button>
+          </div>
+
+          {/* Date Selector */}
+          <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <div>
+              <label className="text-[10px] text-slate-500 font-bold block mb-1">روز</label>
+              <select
+                value={jd}
+                onChange={e => setJd(Number(e.target.value))}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-mono text-center font-bold text-xs"
+              >
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-500 font-bold block mb-1">ماه</label>
+              <select
+                value={jm}
+                onChange={e => setJm(Number(e.target.value))}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-bold text-center text-xs"
+              >
+                {JALALI_MONTH_NAMES.slice(1).map((mName, idx) => (
+                  <option key={idx + 1} value={idx + 1}>{mName}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-500 font-bold block mb-1">سال شمسی</label>
+              <select
+                value={jy}
+                onChange={e => setJy(Number(e.target.value))}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 font-mono text-center font-bold text-xs"
+              >
+                {[1403, 1404, 1405, 1406].map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-slate-600 dark:text-slate-400 font-bold hover:text-slate-900 text-xs"
+          >
+            انصراف
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md cursor-pointer transition-all"
+          >
+            محاسبه و مشاهده امتیازات
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -380,12 +380,33 @@ export function calculateStreakBonus(streakDays: number): number {
   return bonus;
 }
 
+export type LeaderboardPeriod = 'ALL' | 'MONTH' | 'WEEK' | 'CUSTOM' | 'COMPETITION_ROUND';
+
 /**
- * Check if a date string falls inside the chosen period
+ * Check if a date string falls inside the chosen period or cutoff date range
  */
-export function isDateInPeriod(dateStr: string, period: 'ALL' | 'MONTH' | 'WEEK'): boolean {
+export function isDateInPeriod(
+  dateStr: string, 
+  period: LeaderboardPeriod | string = 'ALL',
+  startDate?: string,
+  endDate?: string
+): boolean {
+  if (!dateStr) return false;
+  const rawDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+
+  // If a specific cutoff startDate is provided (e.g. from competition round or custom date query):
+  if (startDate) {
+    const rawStart = startDate.includes('T') ? startDate.split('T')[0] : startDate;
+    if (rawDate < rawStart) return false;
+    if (endDate) {
+      const rawEnd = endDate.includes('T') ? endDate.split('T')[0] : endDate;
+      if (rawDate > rawEnd) return false;
+    }
+    return true;
+  }
+
   if (period === 'ALL') return true;
-  const targetTime = new Date(dateStr).getTime();
+  const targetTime = new Date(rawDate).getTime();
   const now = Date.now();
   const diffDays = (now - targetTime) / (1000 * 60 * 60 * 24);
 
@@ -399,16 +420,94 @@ export function isDateInPeriod(dateStr: string, period: 'ALL' | 'MONTH' | 'WEEK'
 }
 
 /**
+ * Calculates a student's score strictly since a specific cutoff date
+ */
+export function calculateStudentScoreSinceDate(
+  studentId: string,
+  startDate: string,
+  assessments: Assessment[],
+  notes: PrivateNote[] = [],
+  weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
+  enrollments: StudentCourseEnrollment[] = [],
+  programs: TahzibProgram[] = [],
+  endDate?: string
+): { periodScore: number; breakdown: StudentScoreBreakdown; daysCount: number } {
+  const breakdown: StudentScoreBreakdown = {
+    prayers: 0,
+    coreTasks: 0,
+    tahzibPrograms: 0,
+    habits: 0,
+    digitalDiscipline: 0,
+    consistency: 0,
+    streakBonus: 0,
+    notes: 0,
+    courses: 0
+  };
+
+  const userAssessments = (assessments || []).filter(a => a.studentId === studentId && !a.isDeleted);
+  const userNotes = (notes || []).filter(n => n.studentId === studentId && !n.isDeleted);
+  const userEnrollments = (enrollments || []).filter(e => e.studentId === studentId && !e.isDeleted && e.status === 'COMPLETED');
+
+  let daysCount = 0;
+  const periodSubmissions: string[] = [];
+
+  userAssessments.forEach(ass => {
+    if (isDateInPeriod(ass.date, 'CUSTOM', startDate, endDate)) {
+      daysCount++;
+      periodSubmissions.push(ass.date);
+      const dayScore = calculateSingleAssessmentScore(ass, weights, programs);
+      breakdown.prayers += dayScore.prayers;
+      breakdown.coreTasks += dayScore.coreTasks;
+      breakdown.tahzibPrograms += dayScore.tahzibPrograms;
+      breakdown.habits += dayScore.habits;
+      breakdown.digitalDiscipline += dayScore.digitalDiscipline;
+      breakdown.consistency += dayScore.consistency;
+    }
+  });
+
+  const periodStreak = calculateStreaks(periodSubmissions);
+  breakdown.streakBonus = calculateStreakBonus(periodStreak.currentStreak);
+
+  const uniqueNoteDates = new Set(
+    userNotes.filter(n => isDateInPeriod(n.date?.split('T')[0] || '', 'CUSTOM', startDate, endDate)).map(n => n.date?.split('T')[0])
+  );
+  breakdown.notes = uniqueNoteDates.size * weights.privateNote;
+
+  userEnrollments.forEach(enr => {
+    const completionDate = enr.completedAt ? enr.completedAt.split('T')[0] : '';
+    if (isDateInPeriod(completionDate, 'CUSTOM', startDate, endDate)) {
+      const pts = enr.scoreAwarded || 0;
+      breakdown.courses += pts;
+      breakdown.tahzibPrograms += pts;
+    }
+  });
+
+  const periodScore = 
+    breakdown.prayers +
+    breakdown.coreTasks +
+    breakdown.tahzibPrograms +
+    breakdown.habits +
+    breakdown.digitalDiscipline +
+    breakdown.consistency +
+    breakdown.streakBonus +
+    breakdown.notes;
+
+  return { periodScore, breakdown, daysCount };
+}
+
+/**
  * Generates the full leaderboard and ranking for all students
  */
 export function calculateLeaderboard(
   students: User[],
   assessments: Assessment[],
   notes: PrivateNote[] = [],
-  period: 'ALL' | 'MONTH' | 'WEEK' = 'ALL',
+  period: LeaderboardPeriod | string = 'ALL',
   weights: ScoreWeights = DEFAULT_SCORE_WEIGHTS,
   enrollments: StudentCourseEnrollment[] = [],
-  programs: TahzibProgram[] = []
+  programs: TahzibProgram[] = [],
+  startDate?: string,
+  endDate?: string
 ): StudentScoreProfile[] {
   const activeStudents = (students || []).filter(u => u.role === 'STUDENT' && !u.isDeleted && u.isApproved !== false);
 
@@ -447,6 +546,16 @@ export function calculateLeaderboard(
     const submissionDates = userAssessments.map(a => a.date);
     const { currentStreak, maxStreak } = calculateStreaks(submissionDates);
 
+    // Calculate streak specific to the period if startDate cutoff is active
+    let periodStreakDays = currentStreak;
+    if (startDate) {
+      const periodSubmissions = userAssessments
+        .filter(a => isDateInPeriod(a.date, period, startDate, endDate))
+        .map(a => a.date);
+      const periodStreak = calculateStreaks(periodSubmissions);
+      periodStreakDays = periodStreak.currentStreak;
+    }
+
     const breakdown: StudentScoreBreakdown = {
       prayers: 0,
       coreTasks: 0,
@@ -454,7 +563,7 @@ export function calculateLeaderboard(
       habits: 0,
       digitalDiscipline: 0,
       consistency: 0,
-      streakBonus: calculateStreakBonus(currentStreak),
+      streakBonus: calculateStreakBonus(periodStreakDays),
       notes: 0,
       courses: 0
     };
@@ -463,7 +572,7 @@ export function calculateLeaderboard(
     let lastActiveDate: string | undefined = undefined;
 
     userAssessments.forEach(ass => {
-      const inPeriod = isDateInPeriod(ass.date, period);
+      const inPeriod = isDateInPeriod(ass.date, period, startDate, endDate);
       if (inPeriod) {
         activeAssessmentsCount++;
         const dayScore = calculateSingleAssessmentScore(ass, weights, programs);
@@ -481,14 +590,14 @@ export function calculateLeaderboard(
 
     // Notes bonus in period (1 note = 5 points, max 1 per day)
     const uniqueNoteDates = new Set(
-      userNotes.filter(n => isDateInPeriod(n.date?.split('T')[0] || '', period)).map(n => n.date?.split('T')[0])
+      userNotes.filter(n => isDateInPeriod(n.date?.split('T')[0] || '', period, startDate, endDate)).map(n => n.date?.split('T')[0])
     );
     breakdown.notes = uniqueNoteDates.size * weights.privateNote;
 
     // Completed Courses & Workshops bonus
     userEnrollments.forEach(enr => {
       const completionDate = enr.completedAt ? enr.completedAt.split('T')[0] : '';
-      if (isDateInPeriod(completionDate, period)) {
+      if (isDateInPeriod(completionDate, period, startDate, endDate)) {
         const pts = enr.scoreAwarded || 0;
         breakdown.courses += pts;
         breakdown.tahzibPrograms += pts;
@@ -507,7 +616,7 @@ export function calculateLeaderboard(
 
     // For total career score (always all-time regardless of period filter):
     let allTimeScore = periodScore;
-    if (period !== 'ALL') {
+    if (period !== 'ALL' || Boolean(startDate)) {
       let career = calculateStreakBonus(maxStreak);
       userAssessments.forEach(ass => {
         const day = calculateSingleAssessmentScore(ass, weights, programs);

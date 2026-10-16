@@ -13,6 +13,7 @@ import { StudentProfile } from './student/StudentProfile';
 import { MessagingCenter } from './messaging/MessagingCenter';
 import { StudentLeaderboardView } from './leaderboard/StudentLeaderboardView';
 import { StudentCourseBanner } from './student/StudentCourseBanner';
+import { StudentCompetitionNoticeBanner } from './student/StudentCompetitionNoticeBanner';
 import { StudentCoursesView } from './student/StudentCoursesView';
 import { StudentPlannerView } from './planner/StudentPlannerView';
 import { GraduationCap } from 'lucide-react';
@@ -176,6 +177,12 @@ export function StudentPanel() {
           </div>
         </div>
       </div>
+
+      {/* Competition Round Score Announcement & Motivation Banner */}
+      <StudentCompetitionNoticeBanner onNavigateToLeaderboard={() => {
+        setActiveTab('LEADERBOARD');
+        pushTabHistory('LEADERBOARD');
+      }} />
 
       {/* Intelligent Tahzib Course Announcement & Daily Reminder Banner */}
       <StudentCourseBanner />
