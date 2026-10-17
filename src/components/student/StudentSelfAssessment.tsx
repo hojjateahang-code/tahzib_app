@@ -66,14 +66,15 @@ export function StudentSelfAssessment() {
         .first();
       
       if (!record) {
+        const canonicalId = `ass_${currentUser.id}_${selectedDate}`;
         const newRecord: Assessment = {
-          id: crypto.randomUUID(),
+          id: canonicalId,
           studentId: currentUser.id,
           date: selectedDate,
           synced: false
         };
         try {
-          await db.assessments.add(newRecord);
+          await db.assessments.put(newRecord);
         } catch (error) {
           console.error("Error creating record:", error);
         }

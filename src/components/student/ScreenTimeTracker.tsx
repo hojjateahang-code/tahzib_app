@@ -221,23 +221,25 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
       notes: noteText !== undefined ? noteText : notes
     };
 
+    const canonicalId = `ass_${currentUser.id}_${selectedDate}`;
     if (assessment) {
       await db.assessments.update(assessment.id, {
+        id: canonicalId,
         screenTime: screenTimeData,
         updatedAt: Date.now(),
         synced: false
       });
-      setAssessment(prev => prev ? { ...prev, screenTime: screenTimeData, updatedAt: Date.now(), synced: false } : null);
+      setAssessment(prev => prev ? { ...prev, id: canonicalId, screenTime: screenTimeData, updatedAt: Date.now(), synced: false } : null);
     } else {
       const newAssessment: Assessment = {
-        id: crypto.randomUUID(),
+        id: canonicalId,
         studentId: currentUser.id,
         date: selectedDate,
         screenTime: screenTimeData,
         updatedAt: Date.now(),
         synced: false
       };
-      await db.assessments.add(newAssessment);
+      await db.assessments.put(newAssessment);
       setAssessment(newAssessment);
     }
 
@@ -282,14 +284,17 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
       notes: noteText
     };
 
-    const existing = await db.assessments
-      .where('studentId')
-      .equals(currentUser.id)
-      .filter(a => a.date === targetDate)
-      .first();
+    const canonicalId = `ass_${currentUser.id}_${targetDate}`;
+    const existing = await db.assessments.get(canonicalId) ||
+      await db.assessments
+        .where('studentId')
+        .equals(currentUser.id)
+        .filter(a => a.date === targetDate)
+        .first();
 
     if (existing) {
       await db.assessments.update(existing.id, {
+        id: canonicalId,
         screenTime: screenTimeData,
         updatedAt: Date.now(),
         synced: false
@@ -299,14 +304,14 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
       }
     } else {
       const newAssessment: Assessment = {
-        id: crypto.randomUUID(),
+        id: canonicalId,
         studentId: currentUser.id,
         date: targetDate,
         screenTime: screenTimeData,
         updatedAt: Date.now(),
         synced: false
       };
-      await db.assessments.add(newAssessment);
+      await db.assessments.put(newAssessment);
       if (targetDate === selectedDate) {
         setAssessment(newAssessment);
       }
@@ -406,45 +411,10 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
         return;
       }
     } else {
-      // Simulation for web preview / Eitaa mini app: 24h prior + past 14 days backfill
-      extractedAll = {
-        'ایتا': 110,
-        'بله': 45,
-        'تلگرام': 40,
-        'قرآن صوتی و تفاسیر': 70,
-        'کتب حوزوی و تقریرات': 55,
-        'تقویم و اوقات شرعی بادصبا': 15,
-        'مرورگر کروم (پژوهش)': 35,
-        'اینستاگرام': 25,
-        'روبیکا': 30,
-        'سامانه شاد': 20,
-        'بازی شطرنج و فکری': 20,
-      };
-
-      extractedNight = {
-        'ایتا': 35,
-        'تلگرام': 20,
-        'مرورگر کروم (پژوهش)': 15,
-        'اینستاگرام': 15,
-      };
-
-      // Backfill past 14 days into database as final submitted
-      for (let d = 1; d <= 14; d++) {
-        const pastDate = new Date();
-        pastDate.setDate(pastDate.getDate() - d);
-        const pastDateStr = pastDate.toISOString().split('T')[0];
-        const factor = Math.max(0.4, 1 - (d * 0.04));
-        const simApps: Record<string, number> = {};
-        const simNight: Record<string, number> = {};
-        Object.entries(extractedAll).forEach(([k, v]) => {
-          simApps[k] = Math.round(v * factor);
-        });
-        Object.entries(extractedNight).forEach(([k, v]) => {
-          simNight[k] = Math.round(v * factor);
-        });
-        await persistScreenTimeForDate(pastDateStr, simApps, simNight, true, pastDate.toISOString(), undefined, undefined, true);
-        multiDaysCount++;
-      }
+      // محیط وب یا ایتا بدون پل نیتیو اندروید: عدم درج داده‌های ساختگی و نمایش راهنما
+      setExtractNotice('حسگر خودکار استخراج کارکرد گوشی مخصوص نسخه نصبی اندروید است. در محیط وب/ایتا می‌توانید دقایق استفاده از برنامه‌های خود را در جدول زیر به صورت دستی وارد نموده و دکمه ذخیره را بزنید.');
+      setTimeout(() => setExtractNotice(null), 8000);
+      return;
     }
 
     const nowIso = new Date().toISOString();

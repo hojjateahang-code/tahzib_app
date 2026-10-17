@@ -2,18 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store';
 import { safeUUID } from '../lib/crypto';
 import { db, seedDatabase } from '../db';
-import { Shield, LogIn, UserPlus, KeyRound, Smartphone, CheckCircle, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, MessageSquare, ExternalLink } from 'lucide-react';
+import { Shield, LogIn, UserPlus, KeyRound, Smartphone, CheckCircle, AlertCircle, ArrowRight, UserCheck, Eye, EyeOff, MessageSquare, ExternalLink, Loader2 } from 'lucide-react';
 import { initEitaaSDK } from '../lib/browserUtils';
 import { detectEitaaUserFromEnvironment, matchEitaaUser, type EitaaDetectedUser, type EitaaMatchedRole } from '../lib/authUtils';
 import { MinioConnectionDebugWidget } from './MinioConnectionDebugWidget';
 import { syncMinIOData, triggerSync } from '../sync';
 import { syncApkNoticeForUser } from '../utils/apkNoticeSync';
+import { cleanNationalId, cleanPhoneNumber, matchPasswordOrPhone, toEnglishDigits } from '../utils/userDeduplication';
 import type { User } from '../types';
 
 export function Login() {
   const { setCurrentUser } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'forgot'>('login');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -116,47 +119,45 @@ export function Login() {
   };
 
 
-const toEnglishDigits = (str: string): string => {
-  if (!str) return '';
-  return str
-    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
-};
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoadingMsg('');
     
-    const cleanUsername = username.trim();
-    const cleanPassword = password.trim();
+    const cleanUserRaw = username.trim();
+    const cleanPassRaw = password.trim();
 
-    if (!cleanUsername || !cleanPassword) {
-      setError('لطفاً نام کاربری و رمز عبور را وارد کنید.');
+    if (!cleanUserRaw || !cleanPassRaw) {
+      setError('لطفاً کد ملی (یا نام کاربری) و رمز عبور را وارد فرمایید.');
       return;
     }
 
-    const normUsername = toEnglishDigits(cleanUsername).toLowerCase();
-    const normPassword = toEnglishDigits(cleanPassword);
+    const normNat = cleanNationalId(cleanUserRaw);
+    const normPhone = cleanPhoneNumber(cleanUserRaw);
+    const normUsername = toEnglishDigits(cleanUserRaw).toLowerCase();
+    const normPassword = toEnglishDigits(cleanPassRaw);
+
+    setIsSubmitting(true);
 
     try {
       // 1. Direct bulletproof authentication for Technical Manager (admin / fanni / مسئول فنی)
       const isTechAdminAttempt =
-        (normUsername === 'admin' || normUsername === 'fanni' || cleanUsername === 'مسئول فنی') &&
-        (normPassword === 'admin123' || normPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword === 'admin');
+        (normUsername === 'admin' || normUsername === 'fanni' || cleanUserRaw === 'مسئول فنی') &&
+        (normPassword === 'admin123' || normPassword === 'admin' || cleanPassRaw === 'admin123' || cleanPassRaw === 'admin');
 
       if (isTechAdminAttempt) {
         const allUsers = await db.users.toArray();
         let techUser = allUsers.find(u => u.role === 'TECH_ADMIN' || u.username === 'admin' || u.username === 'fanni');
         if (!techUser) {
           techUser = {
-            id: 'u0_' + Date.now(),
+            id: 'u0',
             name: 'مسئول فنی',
             role: 'TECH_ADMIN',
             username: 'admin',
             password: 'admin123',
             isApproved: true
           };
-          await db.users.add(techUser);
+          await db.users.put(techUser);
         } else {
           if (techUser.password !== 'admin123' || !techUser.isApproved || techUser.role !== 'TECH_ADMIN') {
             await db.users.update(techUser.id, {
@@ -171,74 +172,66 @@ const toEnglishDigits = (str: string): string => {
           }
         }
         setCurrentUser(techUser);
+        setIsSubmitting(false);
         return;
       }
 
-      // Try exact indexed match first
-      let user = await db.users.where({ username: cleanUsername }).first();
-      if (!user && normUsername !== cleanUsername) {
-        user = await db.users.where({ username: normUsername }).first();
-      }
-      
-      // Fallback: search across all users (case-insensitive or whitespace-tolerant)
-      if (!user) {
-        const allUsers = await db.users.toArray();
-        user = allUsers.find(
-          u => u.username && (
-            u.username.trim().toLowerCase() === cleanUsername.toLowerCase() ||
-            toEnglishDigits(u.username.trim()).toLowerCase() === normUsername
-          )
-        );
-      }
-
-      // If still not found locally, try syncing latest users from cloud server
-      if (!user) {
-        if (!navigator.onLine) {
-          setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
-          return;
+      // 2. Search locally in Dexie database
+      let allUsers = await db.users.toArray();
+      let user = allUsers.find(u => {
+        const uNat = cleanNationalId(u.nationalId || (u.role === 'STUDENT' ? u.username : ''));
+        if (normNat && uNat === normNat) return true;
+        const uPhone = cleanPhoneNumber(u.phone);
+        if (normPhone && uPhone === normPhone) return true;
+        if (u.username && (
+          u.username.trim().toLowerCase() === cleanUserRaw.toLowerCase() ||
+          toEnglishDigits(u.username.trim()).toLowerCase() === normUsername
+        )) {
+          return true;
         }
+        return false;
+      });
 
-        try {
-          await syncMinIOData();
-        } catch (syncErr: any) {
-          if (!navigator.onLine || syncErr?.message?.includes('fetch') || syncErr?.message?.includes('Network')) {
-            setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
-            return;
+      // 3. If not found locally, try syncing from server if online
+      if (!user) {
+        if (navigator.onLine) {
+          setLoadingMsg('در حال دریافت اطلاعات حساب کاربری از سرور مرکزی...');
+          try {
+            await syncMinIOData();
+            allUsers = await db.users.toArray();
+            user = allUsers.find(u => {
+              const uNat = cleanNationalId(u.nationalId || (u.role === 'STUDENT' ? u.username : ''));
+              if (normNat && uNat === normNat) return true;
+              const uPhone = cleanPhoneNumber(u.phone);
+              if (normPhone && uPhone === normPhone) return true;
+              if (u.username && (
+                u.username.trim().toLowerCase() === cleanUserRaw.toLowerCase() ||
+                toEnglishDigits(u.username.trim()).toLowerCase() === normUsername
+              )) {
+                return true;
+              }
+              return false;
+            });
+          } catch (syncErr) {
+            console.warn('Sync attempt failed on login:', syncErr);
           }
         }
-
-        const refreshedUsers = await db.users.toArray();
-        user = refreshedUsers.find(
-          u => u.username && (
-            u.username.trim().toLowerCase() === cleanUsername.toLowerCase() ||
-            toEnglishDigits(u.username.trim()).toLowerCase() === normUsername
-          )
-        );
-      }
-
-      // If user is admin but db didn't have it yet, double check seed
-      if (!user && (normUsername === 'admin' || normUsername === 'fanni')) {
-        const allUsers = await db.users.toArray();
-        user = allUsers.find(u => u.role === 'TECH_ADMIN');
       }
 
       if (user) {
-        const userPasswordNorm = toEnglishDigits(user.password || '');
-        const passwordMatches =
-          user.password === cleanPassword ||
-          user.password === password ||
-          userPasswordNorm === normPassword;
+        const passwordMatches = matchPasswordOrPhone(cleanPassRaw, user.password || '');
 
         if (passwordMatches) {
           if (user.isApproved === false) {
             setError('حساب کاربری شما در انتظار تأیید مدیریت است.');
+            setIsSubmitting(false);
             return;
           }
 
           // Save / Clear Remember Me preferences
           if (rememberMe) {
             localStorage.setItem('tahzib_remember_me', 'true');
-            localStorage.setItem('tahzib_saved_username', cleanUsername);
+            localStorage.setItem('tahzib_saved_username', cleanUserRaw);
           } else {
             localStorage.setItem('tahzib_remember_me', 'false');
             localStorage.removeItem('tahzib_saved_username');
@@ -260,39 +253,66 @@ const toEnglishDigits = (str: string): string => {
           }
           syncApkNoticeForUser(user).catch(() => null);
           setCurrentUser(user);
+          setIsSubmitting(false);
+          return;
+        } else {
+          setError('رمز عبور وارد شده اشتباه است. (رمز عبور همان شماره تلفن ثبت‌شده هنگام ثبت‌نام است)');
+          setIsSubmitting(false);
           return;
         }
       }
 
+      // Not found handling
       if (!navigator.onLine) {
-        setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
-        return;
+        setError('حساب کاربری با این کد ملی روی این دستگاه یافت نشد. جهت ورود اولیه، لطفاً یک‌بار اتصال اینترنت را برقرار نمایید تا حسابتان دانلود شود، سپس بدون نیاز به اینترنت همواره می‌توانید وارد شوید.');
+      } else {
+        setError('کاربری با این مشخصات یافت نشد. در صورت عدم ثبت‌نام، لطفاً ابتدا از تب «ثبت‌نام» اقدام نمایید.');
       }
-
-      setError('نام کاربری یا رمز عبور اشتباه است.');
     } catch (err: any) {
       console.error('Login error:', err);
-      if (!navigator.onLine || err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || err?.message?.includes('network')) {
-        setError('اتصال به اینترنت وجود ندارد. لطفاً اتصال اینترنت دستگاه خود را بررسی نمایید.');
-      } else {
-        setError('خطا در ارتباط با پایگاه داده.');
-      }
+      setError('خطا در بررسی مشخصات کاربری. لطفاً دوباره تلاش نمایید.');
+    } finally {
+      setIsSubmitting(false);
+      setLoadingMsg('');
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoadingMsg('');
     
-    if (!regName || !regNationalId || !regPhone) {
-      setError('لطفاً همه فیلدهای ضروری را پر کنید.');
+    const cleanName = regName.trim();
+    const cleanNat = cleanNationalId(regNationalId);
+    const cleanPhone = cleanPhoneNumber(regPhone);
+
+    if (!cleanName || !cleanNat || !cleanPhone) {
+      setError('لطفاً همه فیلدهای ضروری را به صورت کامل پر کنید.');
       return;
     }
 
+    if (cleanNat.length < 8) {
+      setError('کد ملی وارد شده باید معتبر باشد (حداقل ۸ تا ۱۰ رقم).');
+      return;
+    }
+
+    if (cleanPhone.length < 10) {
+      setError('شماره تلفن همراه وارد شده نامعتبر است (مانند ۰۹۱۲۳۴۵۶۷۸۹).');
+      return;
+    }
+
+    setIsSubmitting(true);
+
     try {
-      const existingUser = await db.users.where({ username: regNationalId }).first();
+      const allUsers = await db.users.toArray();
+      const existingUser = allUsers.find(u => {
+        const uNat = cleanNationalId(u.nationalId || (u.role === 'STUDENT' ? u.username : ''));
+        return uNat === cleanNat;
+      });
+
       if (existingUser) {
-        setError('این کد ملی قبلاً ثبت شده است.');
+        setError('این کد ملی قبلاً در سامانه ثبت شده است. لطفاً از تب «ورود» با همین کد ملی و رمز عبور (شماره موبایل) وارد شوید.');
+        setIsSubmitting(false);
         return;
       }
 
@@ -301,26 +321,34 @@ const toEnglishDigits = (str: string): string => {
         userEitaaIdInput = `@${detectedEitaaUser.username.replace(/^@/, '')}`;
       }
 
+      const canonicalId = `user_${cleanNat}`;
+
       const newUser: User = {
-        id: safeUUID(),
-        name: regName,
-        username: regNationalId,
-        password: regPhone, // Initial password
-        nationalId: regNationalId,
-        phone: regPhone,
+        id: canonicalId,
+        name: cleanName,
+        username: cleanNat,
+        password: cleanPhone, // Initial password
+        nationalId: cleanNat,
+        phone: cleanPhone,
         eitaaId: userEitaaIdInput,
         eitaaUserId: detectedEitaaUser?.id ? String(detectedEitaaUser.id) : undefined,
-        role: 'STUDENT' as const,
- base: regBase,
-        isApproved: true // Auto-approved for fast onboarding
+        role: 'STUDENT',
+        base: regBase,
+        isApproved: true, // Auto-approved for fast onboarding
+        createdAt: new Date().toISOString(),
+        updatedAt: Date.now()
       };
 
-      await db.users.add(newUser);
+      await db.users.put(newUser);
       await syncApkNoticeForUser(newUser).catch(() => null);
       triggerSync();
       setCurrentUser(newUser);
     } catch (err) {
-      setError('خطا در ثبت‌نام.');
+      console.error('Registration error:', err);
+      setError('خطا در ثبت‌نام کاربر.');
+    } finally {
+      setIsSubmitting(false);
+      setLoadingMsg('');
     }
   };
 
@@ -489,6 +517,13 @@ const toEnglishDigits = (str: string): string => {
             </button>
           </div>
 
+          {loadingMsg && (
+            <div className="bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-200 p-3 rounded-xl text-xs mb-4 border border-indigo-200 dark:border-indigo-900/50 font-bold flex items-center gap-2 animate-pulse">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <span>{loadingMsg}</span>
+            </div>
+          )}
+
           {error && (
             <div className="bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 p-3 rounded-xl text-sm mb-4 border border-rose-200 dark:border-rose-900/50 font-bold">
               {error}
@@ -503,19 +538,20 @@ const toEnglishDigits = (str: string): string => {
           {activeTab === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">نام کاربری (کد ملی )</label>
+                <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-1.5">کد ملی (نام کاربری)</label>
                 <input
                   type="text"
                   className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-medium text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   dir="ltr"
-                  placeholder=" کد ملی"
+                  placeholder="کد ملی ۱۰ رقمی"
+                  disabled={isSubmitting}
                 />
               </div>
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">رمز عبور</label>
+                  <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">رمز عبور (شماره موبایل)</label>
                   <button type="button" onClick={() => { setActiveTab('forgot'); setError(''); setForgotRecoveryUser(null); }} className="text-xs text-indigo-700 dark:text-indigo-400 hover:underline font-bold">رمز عبور را فراموش کردم</button>
                 </div>
                 <div className="relative">
@@ -525,7 +561,8 @@ const toEnglishDigits = (str: string): string => {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     dir="ltr"
-                    placeholder="••••••••"
+                    placeholder="شماره موبایل (مثلاً ۰۹۱۲۳۴۵۶۷۸۹)"
+                    disabled={isSubmitting}
                   />
                   <button
                     type="button"
@@ -545,6 +582,7 @@ const toEnglishDigits = (str: string): string => {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={e => setRememberMe(e.target.checked)}
+                    disabled={isSubmitting}
                     className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer"
                   />
                   <span>مرا به خاطر بسپار</span>
@@ -553,10 +591,20 @@ const toEnglishDigits = (str: string): string => {
               
               <button
                 type="submit"
-                className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 mt-4 cursor-pointer"
+                disabled={isSubmitting}
+                className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 mt-4 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <LogIn className="w-5 h-5" />
-                ورود به سامانه
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>در حال بررسی و ورود...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5" />
+                    <span>ورود به سامانه</span>
+                  </>
+                )}
               </button>
             </form>
           )}
@@ -570,6 +618,8 @@ const toEnglishDigits = (str: string): string => {
                   className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   value={regName}
                   onChange={e => setRegName(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="نام و نام خانوادگی طلبه"
                 />
               </div>
               <div>
@@ -578,6 +628,7 @@ const toEnglishDigits = (str: string): string => {
                   className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   value={regBase}
                   onChange={e => setRegBase(Number(e.target.value))}
+                  disabled={isSubmitting}
                 >
                   {[1, 2, 3, 4, 5, 6].map(b => (
                     <option key={b} value={b}>پایه {b}</option>
@@ -585,32 +636,46 @@ const toEnglishDigits = (str: string): string => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">کد ملی (به عنوان نام کاربری)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">کد ملی (نام کاربری یکتا)</label>
                 <input
                   type="text"
                   className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   value={regNationalId}
                   onChange={e => setRegNationalId(e.target.value)}
                   dir="ltr"
+                  disabled={isSubmitting}
+                  placeholder="۱۰ رقم بدون فاصله و خط تیره"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">شماره موبایل (رمز عبور اولیه)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">شماره موبایل (رمز عبور ورود)</label>
                 <input
                   type="tel"
                   className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   value={regPhone}
                   onChange={e => setRegPhone(e.target.value)}
                   dir="ltr"
+                  disabled={isSubmitting}
+                  placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 mt-4"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <UserPlus className="w-5 h-5" />
-                ثبت‌نام در سامانه
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>در حال ایجاد حساب کاربری...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-5 h-5" />
+                    <span>ثبت‌نام در سامانه</span>
+                  </>
+                )}
               </button>
             </form>
           )}

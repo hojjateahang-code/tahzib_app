@@ -178,18 +178,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * بارگذاری مجدد برنامه بر اساس آدرس سرور زنده یا سفارشی
+     * بارگذاری برنامه از سورس داخلی امن برای کارکرد ۱۰۰٪ آفلاین و پایدار
      */
     fun reloadAppUrl() {
-        val prefs = getSharedPreferences("tahzib_config", Context.MODE_PRIVATE)
-        val customUrl = prefs.getString("custom_server_url", null)
-        val targetUrl = if (!customUrl.isNullOrBlank()) {
-            customUrl.trim()
-        } else {
-            BuildConfig.SERVER_URL
-        }
-
-        Log.i("MainActivity", "Loading Live URL in WebView: $targetUrl")
+        val targetUrl = BuildConfig.FALLBACK_ASSET_URL
+        Log.i("MainActivity", "Loading Offline-First Asset URL in WebView: $targetUrl")
         webView.loadUrl(targetUrl)
     }
 

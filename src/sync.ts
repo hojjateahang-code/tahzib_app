@@ -1,11 +1,10 @@
 import { safeUUID } from './lib/crypto';
 import { db } from './db';
-import type { BaseEntity } from './types';
+import type { BaseEntity, User, Assessment } from './types';
 import { logger } from './lib/logger';
 import { getApiUrl } from './lib/apiConfig';
 import { syncApkNoticeForAllUsers, isApkDownloadMessage, getCachedApkNoticeStatus } from './utils/apkNoticeSync';
-
-
+import { normalizeNationalId, migrateAndDeduplicateUsers, cleanNationalId, cleanPhoneNumber, getCanonicalUserId, deduplicateAndMigrateUsers } from './utils/userDeduplication';
 
 let syncTimeout: any = null;
 
@@ -104,6 +103,94 @@ function mergeEntityArrays<T extends BaseEntity & { id: string }>(
       map.set(incoming.id, winning);
     }
   }
+
+  return Array.from(map.values());
+}
+
+/**
+ * ادغام هوشمند و یکتا برای کاربران بر مبنای کد ملی و نام کاربری
+ */
+export function mergeUserArrays(localUsers: User[], incomingUsers: User[]): User[] {
+  const mapByNat = new Map<string, User>();
+  const mapById = new Map<string, User>();
+
+  const processUser = (u: User) => {
+    const nat = cleanNationalId(u.nationalId || (u.role === 'STUDENT' ? u.username : ''));
+    let existing: User | undefined;
+    if (nat) {
+      existing = mapByNat.get(nat);
+    }
+    if (!existing) {
+      existing = mapById.get(u.id);
+    }
+
+    if (!existing) {
+      const copy = { ...u };
+      if (nat) {
+        copy.nationalId = nat;
+        if (copy.role === 'STUDENT') copy.username = nat;
+        mapByNat.set(nat, copy);
+      }
+      mapById.set(copy.id, copy);
+    } else {
+      const existingTime = existing.updatedAt || 0;
+      const incomingTime = u.updatedAt || 0;
+      let winner = incomingTime >= existingTime ? { ...existing, ...u } : { ...u, ...existing };
+
+      if (nat) {
+        winner.nationalId = nat;
+        if (winner.role === 'STUDENT') winner.username = nat;
+      }
+      if (!winner.phone && (existing.phone || u.phone)) winner.phone = existing.phone || u.phone;
+      if (!winner.eitaaId && (existing.eitaaId || u.eitaaId)) winner.eitaaId = existing.eitaaId || u.eitaaId;
+      if (!winner.eitaaUserId && (existing.eitaaUserId || u.eitaaUserId)) winner.eitaaUserId = existing.eitaaUserId || u.eitaaUserId;
+      if (existing.isApproved || u.isApproved) winner.isApproved = true;
+
+      if (nat) mapByNat.set(nat, winner);
+      mapById.set(winner.id, winner);
+      if (existing.id !== winner.id) {
+        mapById.delete(existing.id);
+      }
+    }
+  };
+
+  for (const u of localUsers) processUser(u);
+  for (const u of incomingUsers) processUser(u);
+
+  return Array.from(mapById.values());
+}
+
+/**
+ * ادغام یکتا برای ارزیابی‌ها بر مبنای ترکیب دانش‌آموز و تاریخ
+ */
+export function mergeAssessmentArrays(localAssessments: Assessment[], incomingAssessments: Assessment[]): Assessment[] {
+  const map = new Map<string, Assessment>();
+
+  const processAss = (ass: Assessment) => {
+    const canonicalKey = `ass_${ass.studentId}_${ass.date}`;
+    const existing = map.get(canonicalKey) || map.get(ass.id);
+
+    if (!existing) {
+      map.set(canonicalKey, { ...ass, id: canonicalKey });
+    } else {
+      const localTime = existing.updatedAt || 0;
+      const incomingTime = ass.updatedAt || 0;
+      let winner = incomingTime >= localTime ? { ...existing, ...ass } : { ...ass, ...existing };
+      winner.id = canonicalKey;
+
+      const bestSt = (incomingTime >= localTime ? ass.screenTime : existing.screenTime) || existing.screenTime || ass.screenTime;
+      winner.screenTime = bestSt;
+
+      winner.customTasks = { ...(existing.customTasks || {}), ...(ass.customTasks || {}) };
+      winner.tahzibProgramAnswers = { ...(existing.tahzibProgramAnswers || {}), ...(ass.tahzibProgramAnswers || {}) };
+      winner.notes = { ...(existing.notes || {}), ...(ass.notes || {}) };
+
+      map.set(canonicalKey, winner);
+    }
+  };
+
+  for (const a of localAssessments) processAss(a);
+  for (const a of incomingAssessments) processAss(a);
 
   return Array.from(map.values());
 }
@@ -229,13 +316,13 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
     // 4. MERGE: Apply Granular Deep Merge across local + all remote datasets
     for (const remoteData of remoteDatasets) {
       if (Array.isArray(remoteData.users)) {
-        localUsers = mergeEntityArrays(localUsers, remoteData.users);
+        localUsers = mergeUserArrays(localUsers, remoteData.users);
       }
       if (Array.isArray(remoteData.tasks)) {
         localTasks = mergeEntityArrays(localTasks, remoteData.tasks);
       }
       if (Array.isArray(remoteData.assessments)) {
-        localAssessments = mergeEntityArrays(localAssessments, remoteData.assessments);
+        localAssessments = mergeAssessmentArrays(localAssessments, remoteData.assessments);
       }
       if (Array.isArray(remoteData.reports)) {
         localReports = mergeEntityArrays(localReports, remoteData.reports);
@@ -309,6 +396,9 @@ export async function syncMinIOData(): Promise<{ success: boolean; message: stri
 
     // Apply persistent APK notice state (create for all or purge for all based on server settings)
     await syncApkNoticeForAllUsers().catch(() => null);
+
+    // Run automatic deduplication and normalization for users in local database
+    await deduplicateAndMigrateUsers().catch(() => null);
 
     // 5. PUSH: Upload updated consensus dataset to Storage under client device key + latest.json
     const deviceId = getDeviceId();

@@ -5,6 +5,7 @@ import type {
   TahzibCourse, StudentCourseEnrollment, PlannerItem, PlannerGoal,
   PlannerCustomCategory, PlannerCustomPreset, PlannerAcademicTerm 
 } from './types';
+import { deduplicateAndMigrateUsers } from './utils/userDeduplication';
 
 export class SeminaryDB extends Dexie {
   users!: Table<User, string>;
@@ -406,6 +407,8 @@ export async function seedDatabase() {
         createdAt: now.toISOString()
       });
     }
+    // Ensure users deduplicated and normalized
+    await deduplicateAndMigrateUsers().catch(() => null);
   } catch (err) {
     console.error('Error seeding database:', err);
   }
