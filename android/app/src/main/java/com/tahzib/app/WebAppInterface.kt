@@ -44,6 +44,30 @@ class WebAppInterface(private val mContext: Context) {
     }
 
     /**
+     * ۳-ب. دریافت گزارش کامل ۲۴ ساعت روز قبل (یا تاریخ خاص) به صورت آبجکت JSON
+     */
+    @JavascriptInterface
+    fun getDayUsageReport(dateStr: String?): String {
+        val report = getAppUsageStatsForDate(mContext, dateStr)
+        val dayObj = JSONObject()
+        dayObj.put("date", report.date)
+        dayObj.put("totalMinutes", report.totalMinutes)
+        dayObj.put("nightMinutes", report.nightMinutes)
+
+        val appsArray = JSONArray()
+        for (info in report.apps) {
+            val appObj = JSONObject()
+            appObj.put("packageName", info.packageName)
+            appObj.put("appName", info.appName)
+            appObj.put("usageTimeMillis", info.usageTimeMillis)
+            appObj.put("nightUsageMillis", info.nightUsageMillis)
+            appsArray.put(appObj)
+        }
+        dayObj.put("apps", appsArray)
+        return dayObj.toString()
+    }
+
+    /**
      * استخراج چندروزه آمار پایش گوشی (امروز و روزهای گذشته تا ۷ یا ۱۴ روز)
      */
     @JavascriptInterface

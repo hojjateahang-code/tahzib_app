@@ -376,34 +376,50 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
           }
         }
 
-        // Fallback to single 24-hour extraction if multi-day not returned
+        // Fallback to single day extraction (previous 24 hours from 00:00 yesterday to 00:00 today)
         if (Object.keys(extractedAll).length === 0) {
-          const statsString = bridge.getAppUsageStats();
-          if (statsString) {
-            const statsList: { 
-              packageName: string; 
-              appName?: string; 
-              usageTimeMillis: number; 
-              nightUsageMillis?: number;
-            }[] = JSON.parse(statsString);
+          let statsList: { 
+            packageName: string; 
+            appName?: string; 
+            usageTimeMillis: number; 
+            nightUsageMillis?: number;
+          }[] = [];
 
-            statsList.forEach(item => {
-              const totalMins = Math.round(item.usageTimeMillis / 60000);
-              const nightMins = item.nightUsageMillis ? Math.round(item.nightUsageMillis / 60000) : 0;
-
-              if (totalMins <= 0 && nightMins <= 0) return;
-
-              const friendlyName = item.appName && item.appName.trim() 
-                ? item.appName.trim() 
-                : getReadableAppName(item.packageName);
-
-              extractedAll[friendlyName] = (extractedAll[friendlyName] || 0) + (totalMins > 0 ? totalMins : nightMins);
-
-              if (nightMins > 0) {
-                extractedNight[friendlyName] = (extractedNight[friendlyName] || 0) + nightMins;
+          if (typeof bridge.getDayUsageReport === 'function') {
+            try {
+              const reportStr = bridge.getDayUsageReport(selectedDate);
+              if (reportStr) {
+                const reportObj = JSON.parse(reportStr);
+                statsList = reportObj.apps || [];
               }
-            });
+            } catch (err) {
+              console.warn('Could not parse getDayUsageReport, falling back to getAppUsageStats', err);
+            }
           }
+
+          if (statsList.length === 0 && typeof bridge.getAppUsageStats === 'function') {
+            const statsString = bridge.getAppUsageStats();
+            if (statsString) {
+              statsList = JSON.parse(statsString);
+            }
+          }
+
+          statsList.forEach(item => {
+            const totalMins = Math.round(item.usageTimeMillis / 60000);
+            const nightMins = item.nightUsageMillis ? Math.round(item.nightUsageMillis / 60000) : 0;
+
+            if (totalMins <= 0 && nightMins <= 0) return;
+
+            const friendlyName = item.appName && item.appName.trim() 
+              ? item.appName.trim() 
+              : getReadableAppName(item.packageName);
+
+            extractedAll[friendlyName] = (extractedAll[friendlyName] || 0) + (totalMins > 0 ? totalMins : nightMins);
+
+            if (nightMins > 0) {
+              extractedNight[friendlyName] = (extractedNight[friendlyName] || 0) + nightMins;
+            }
+          });
         }
       } catch (err) {
         console.error('Error fetching usage stats:', err);
@@ -430,8 +446,8 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
     const totalApps = Object.keys(extractedAll).length;
     const nightAppsCount = Object.keys(extractedNight).length;
 
-    setExtractNotice(`✅ آمار ۲۴ ساعت گذشته از حسگر گوشی استخراج و ثبت نهایی گردید (${totalApps} برنامه فعال${nightAppsCount > 0 ? `، ${nightAppsCount} مورد بعد از ۲۲:۳۰` : ''}).${multiDaysCount > 0 ? ` سوابق روزهای گذشته نیز در سامانه به‌روزرسانی شد.` : ''}`);
-    setTimeout(() => setExtractNotice(null), 7000);
+    setExtractNotice(`✅ آمار ۲۴ ساعت روز قبل (۰۰:۰۰ دیروز تا ۰۰:۰۰ امروز) با موفقیت استخراج و ثبت نهایی شد (${totalApps} برنامه واقعی${nightAppsCount > 0 ? `، ${nightAppsCount} مورد بعد از ۲۲:۳۰` : ''}).${multiDaysCount > 0 ? ` سوابق روزهای گذشته نیز در سامانه ثبت گردید.` : ''}`);
+    setTimeout(() => setExtractNotice(null), 8000);
   };
 
   // Calculations
@@ -597,7 +613,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
               )}
             </div>
             <p className="text-[11px] text-slate-300 mt-1 leading-normal">
-              ثبت تمامی برنامه‌های دارای فعالیت و تفکیک اختصاصی برنامه‌های فعال بعد از ساعت ۱۰:۳۰ شب
+              پایش برنامه‌های کاربردی روز قبل (از ساعت ۰۰:۰۰ بامداد دیروز تا ۰۰:۰۰ بامداد امروز) با حذف کامل سرویس‌های سیستمی و پس‌زمینه
             </p>
           </div>
         </div>
@@ -609,7 +625,7 @@ export function ScreenTimeTracker({ date: propDate }: ScreenTimeTrackerProps) {
             className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black px-4 py-2.5 rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0 border border-emerald-400/30"
           >
             {isAutoExtracted ? <RotateCw className="w-4 h-4 text-emerald-200" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
-            <span>{isAutoExtracted ? 'استخراج مجدد و به‌روزرسانی نهایی' : 'استخراج خودکار از گوشی و ثبت نهایی'}</span>
+            <span>{isAutoExtracted ? 'استخراج مجدد روز قبل و به‌روزرسانی' : 'استخراج کارکرد ۲۴ ساعت روز قبل و ثبت نهایی'}</span>
           </button>
         </div>
       </div>

@@ -29,8 +29,32 @@ data class DayUsageReport(
 )
 
 /**
- * لیست سیاه سرویس‌ها و فرآیندهای سیستمی (مخصوصاً رابط کاربری شیائومی MIUI / HyperOS، سامسونگ و گوگل)
- * که نباید به عنوان برنامه‌های کاربر محاسبه شوند
+ * کلمات کلیدی عناوین سیستمی جهت مسدودسازی قطعی نمایش آن‌ها در لیست برنامه‌ها
+ */
+private val SYSTEM_LABEL_KEYWORDS = listOf(
+    "سیستم",
+    "راه‌انداز",
+    "لانچر",
+    "صفحه اصلی",
+    "امنیت",
+    "تنظیمات",
+    "خدمات google",
+    "system ui",
+    "android system",
+    "settings",
+    "security",
+    "launcher",
+    "system launcher",
+    "quick ball",
+    "always on display",
+    "xiaomi service",
+    "google play services",
+    "device care",
+    "smart capture"
+)
+
+/**
+ * لیست سیاه قطعی بسته‌ها و فرآیندهای سیستمی (شیائومی MIUI/HyperOS، سامسونگ، گوگل و اندروید خام)
  */
 private val SYSTEM_PACKAGE_BLACKLIST = setOf(
     "android",
@@ -49,28 +73,28 @@ private val SYSTEM_PACKAGE_BLACKLIST = setOf(
     "com.google.android.gsf",
     "com.google.android.setupwizard",
 
-    // سرویس‌های شیائومی (Xiaomi MIUI & HyperOS)
+    // سرویس‌های سیستمی و پس‌زمینه شیائومی (Xiaomi MIUI & HyperOS)
     "com.miui.home",                 // لانچر و صفحه اصلی شیائومی
     "com.miui.securitycenter",       // امنیت و بهینه‌ساز شیائومی
     "com.miui.securityadd",          // افزونه‌های امنیت شیائومی
-    "com.miui.powerkeeper",          // مدیریت باتری و فرآیندهای پس‌زمینه شیائومی
+    "com.miui.powerkeeper",          // بهینه‌ساز باتری شیائومی
     "com.miui.cleanmaster",          // پاک‌کننده حافظه
     "com.miui.system",               // هسته سیستم شیائومی
     "com.miui.screenrecorder",       // ضبط صفحه
     "com.miui.touchassistant",       // دستیار لمسی و کلید شناور
-    "com.miui.aod",                  // صفحه نمایش همیشه روشن (Always On Display)
+    "com.miui.aod",                  // صفحه نمایش همیشه روشن
     "com.miui.notification",         // مدیریت اعلان‌ها
-    "com.miui.hybrid",               // موتور وب داخلی شیائومی
-    "com.miui.miservice",            // سرویس پشتیبانی شیائومی
+    "com.miui.hybrid",               // موتور وب داخلی
+    "com.miui.miservice",            // پشتیبانی شیائومی
     "com.miui.msa.global",           // فریم‌ورک سرویس‌های شیائومی
     "com.miui.contentcatcher",       // اسکنر محتوای شیائومی
     "com.miui.personalassistant",    // دستیار هوشمند و App Vault
     "com.miui.weather2",             // ویجت هوای پس‌زمینه
     "com.miui.gallery.cloud",        // همگام‌ساز گالری شیائومی
     "com.xiaomi.misettings",         // تنظیمات تکمیلی شیائومی
-    "com.xiaomi.joyose",             // مدیریت عملکرد و باتری بازی‌های شیائومی
-    "com.xiaomi.xmsf",               // سرویس پوش نوتیفیکیشن شیائومی (Xiaomi Service Framework)
-    "com.mi.android.globallauncher", // لانچر پوکو (Poco Launcher)
+    "com.xiaomi.joyose",             // کنترل بازی و باتری شیائومی
+    "com.xiaomi.xmsf",               // سرویس پوش نوتیفیکیشن شیائومی
+    "com.mi.android.globallauncher", // لانچر پوکو
 
     // سرویس‌های سامسونگ
     "com.sec.android.app.launcher",
@@ -100,7 +124,7 @@ fun requestUsageStatsPermission(context: Context) {
 }
 
 /**
- * تشخیص هوشمند لانچر پیش‌فرض یا هر رابط کاربری صفحه اصلی
+ * تشخیص هوشمند لانچر پیش‌فرض یا رابط کاربری صفحه اصلی
  */
 private fun isLauncherApp(context: Context, packageName: String): Boolean {
     return try {
@@ -125,30 +149,6 @@ private fun isKeyboardApp(context: Context, packageName: String): Boolean {
 }
 
 /**
- * اعتبارسنجی قطعی اینکه آیا یک پکیج، یک برنامه کاربردی واقعی و مستقل توسط کاربر است یا فرآیند سیستمی
- */
-fun isRealUserApp(context: Context, packageName: String): Boolean {
-    val cleanPkg = packageName.trim().lowercase()
-    if (SYSTEM_PACKAGE_BLACKLIST.contains(cleanPkg)) return false
-    if (cleanPkg.startsWith("com.miui.") || cleanPkg.startsWith("com.xiaomi.")) {
-        // فیلتر کردن تمام پکیج‌های فریم‌ورک شیائومی مگر برنامه‌های واقعی مثل Mi Browser
-        if (cleanPkg != "com.mi.globalbrowser" && cleanPkg != "com.android.browser") {
-            return false
-        }
-    }
-    if (isLauncherApp(context, packageName)) return false
-    if (isKeyboardApp(context, packageName)) return false
-
-    return try {
-        // برنامه باید دارای یک Activity قابل باز شدن (Launch Intent) باشد
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-        launchIntent != null
-    } catch (e: Exception) {
-        false
-    }
-}
-
-/**
  * استخراج نام خوانا و محلی برنامه با استفاده از PackageManager اندروید
  */
 fun getAppReadableName(context: Context, packageName: String): String {
@@ -163,8 +163,52 @@ fun getAppReadableName(context: Context, packageName: String): String {
 }
 
 /**
+ * اعتبارسنجی قطعی اینکه آیا یک پکیج، یک برنامه کاربردی واقعی و مستقل توسط کاربر است یا فرآیند سیستمی
+ */
+fun isRealUserApp(context: Context, packageName: String): Boolean {
+    val cleanPkg = packageName.trim().lowercase()
+
+    // ۱. بررسی لیست سیاه پکیج‌ها
+    if (SYSTEM_PACKAGE_BLACKLIST.contains(cleanPkg)) return false
+
+    // ۲. فیلتر کردن سرویس‌های سیستمی شیائومی و سامسونگ
+    if (cleanPkg.startsWith("com.miui.") || cleanPkg.startsWith("com.xiaomi.")) {
+        if (cleanPkg != "com.mi.globalbrowser" && cleanPkg != "com.android.browser") {
+            return false
+        }
+    }
+    if (cleanPkg.startsWith("com.sec.android.") || cleanPkg.startsWith("com.samsung.android.app.")) {
+        if (!cleanPkg.contains("browser") && !cleanPkg.contains("notes")) {
+            return false
+        }
+    }
+
+    // ۳. فیلتر لانچر و کیبورد
+    if (isLauncherApp(context, packageName)) return false
+    if (isKeyboardApp(context, packageName)) return false
+
+    // ۴. برنامه حتماً باید توسط کاربر قابل لمس و باز شدن باشد (دارای آیکون لانچر)
+    try {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent == null) return false
+    } catch (e: Exception) {
+        return false
+    }
+
+    // ۵. بررسی عنوان برنامه (فیلتر عناوینی که شامل سیستم، لانچر، امنیت یا تنظیمات هستند)
+    val label = getAppReadableName(context, packageName).lowercase(Locale.ROOT)
+    for (kw in SYSTEM_LABEL_KEYWORDS) {
+        if (label.contains(kw)) {
+            return false
+        }
+    }
+
+    return true
+}
+
+/**
  * محاسبه دقیق مدت زمان استفاده در یک بازه زمانی معین
- * با فیلتر دقیق برنامه‌های سیستمی شیائومی و سامسونگ و سقف ریاضی شبانه‌روز
+ * با فیلتر دقیق برنامه‌های سیستمی و سقف ریاضی شبانه‌روز
  */
 fun calculateAccurateUsageForWindow(
     context: Context,
@@ -188,18 +232,17 @@ fun calculateAccurateUsageForWindow(
             val pkg = event.packageName ?: continue
             val time = Math.max(windowStart, Math.min(event.timeStamp, windowEnd))
 
-            // فیلتر برنامه‌های سیستمی، لانچرها و فریم‌ورک شیائومی
+            // فیلتر کامل برنامه‌های سیستمی، لانچرها و فریم‌ورک شیائومی/اندروید
             if (!isRealUserApp(context, pkg)) continue
 
             when (event.eventType) {
                 UsageEvents.Event.MOVE_TO_FOREGROUND,
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
-                    // با باز شدن برنامه جدید، برنامه قبلی فوراً بسته می‌شود
+                    // با باز شدن برنامه جدید، نشست برنامه قبلی پایان می‌یابد
                     for ((otherPkg, start) in appLastResume.toMap()) {
                         if (otherPkg != pkg && start != null && time > start) {
-                            // در شیائومی اگر نشست بیش از ۲ ساعت پیوسته بدون وقفه بماند، به عنوان نشست معلق نرمال‌سازی می‌شود
                             val rawSession = time - start
-                            val sessionDuration = Math.min(rawSession, 2 * 60 * 60 * 1000L)
+                            val sessionDuration = Math.min(rawSession, 2 * 60 * 60 * 1000L) // سقف ۲ ساعت برای نشست پیوسته
                             if (sessionDuration > 0) {
                                 totalUsageMap[otherPkg] = (totalUsageMap[otherPkg] ?: 0L) + sessionDuration
                                 val nightPortion = computeNightOverlap(start, start + sessionDuration)
@@ -249,11 +292,11 @@ fun calculateAccurateUsageForWindow(
             }
         }
 
-        // برای برنامه‌ای که در آخرین لحظه هنوز باز مانده بود
+        // برای برنامه‌ای که در انتهای بازه هنوز باز مانده بود
         for ((pkg, start) in appLastResume) {
             if (windowEnd > start) {
                 val rawSession = windowEnd - start
-                val sessionDuration = Math.min(rawSession, 30 * 60 * 1000L) // حداکثر ۳۰ دقیقه برای آخرین نشست
+                val sessionDuration = Math.min(rawSession, 30 * 60 * 1000L)
                 totalUsageMap[pkg] = (totalUsageMap[pkg] ?: 0L) + sessionDuration
                 val nightPortion = computeNightOverlap(start, start + sessionDuration)
                 if (nightPortion > 0) {
@@ -262,7 +305,7 @@ fun calculateAccurateUsageForWindow(
             }
         }
     } catch (e: Exception) {
-        // خطا در پردازش رویدادها
+        // نادیده گرفتن خطا
     }
 
     // روش دوم (پشتیبان): بازیابی تجمیعی صرفاً برای برنامه‌های کاربر واقعی در صورت خالی بودن رویدادها
@@ -303,7 +346,8 @@ fun calculateAccurateUsageForWindow(
     for ((pkg, totalTime) in totalUsageMap) {
         val scaledTotal = (totalTime * scaleFactor).toLong()
         val nightTime = Math.min(nightUsageMap[pkg] ?: 0L, scaledTotal)
-        if (scaledTotal >= 10_000L) { // حداقل ۱۰ ثانیه استفاده واقعی
+        // حداقل ۶۰ ثانیه (۱ دقیقه) استفاده در طول ۲۴ ساعت تا بیدارباش‌های ناچیز پس‌زمینه فیلتر شوند
+        if (scaledTotal >= 60_000L) {
             val appName = getAppReadableName(context, pkg)
             resultList.add(
                 AppUsageInfo(
@@ -365,48 +409,86 @@ private fun computeNightOverlap(start: Long, end: Long): Long {
 }
 
 /**
- * دریافت آمار دقیق استفاده ۲۴ ساعت گذشته تا این لحظه
+ * استخراج آمار ۲۴ ساعت روز قبل (از ساعت ۰۰:۰۰ بامداد روز قبل تا ۰۰:۰۰ بامداد روز جاری)
+ * برای مثال: اگر در روز ۲۶م دکمه استخراج زده شود، بازه از ۰۰:۰۰ بامداد ۲۵م تا ۰۰:۰۰ بامداد ۲۶م محاسبه می‌شود
  */
-fun getAppUsageStats(context: Context): List<AppUsageInfo> {
-    val now = System.currentTimeMillis()
-    val start24hAgo = now - (24 * 60 * 60 * 1000L)
-    return calculateAccurateUsageForWindow(context, start24hAgo, now)
+fun getAppUsageStatsForDate(context: Context, dateStr: String? = null): DayUsageReport {
+    val cal = Calendar.getInstance()
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+    if (!dateStr.isNullOrBlank()) {
+        try {
+            val parsed = sdf.parse(dateStr.trim())
+            if (parsed != null) {
+                cal.time = parsed
+            } else {
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+            }
+        } catch (e: Exception) {
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+        }
+    } else {
+        // به صورت پیش‌فرض: روز قبل
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+    }
+
+    // شروع بازه: ساعت 00:00:00 روز قبل (مثلاً ۲۵م)
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    val windowStart = cal.timeInMillis
+    val targetDateStr = sdf.format(Date(windowStart))
+
+    // پایان بازه: ساعت 00:00:00 روز جاری (مثلاً ۲۶م / صفر بامداد روز فعلی)
+    cal.add(Calendar.DAY_OF_YEAR, 1)
+    val windowEnd = cal.timeInMillis
+
+    val dayApps = calculateAccurateUsageForWindow(context, windowStart, windowEnd)
+    val totalMins = dayApps.sumOf { it.usageTimeMillis } / 60000L
+    val nightMins = dayApps.sumOf { it.nightUsageMillis } / 60000L
+
+    return DayUsageReport(
+        date = targetDateStr,
+        totalMinutes = totalMins,
+        nightMinutes = nightMins,
+        apps = dayApps
+    )
 }
 
 /**
- * استخراج چندروزه منطبق بر روزهای تقویمی (Calendar Days: 00:00 تا 23:59:59)
- * برای هماهنگی ۱۰۰٪ با آمار Digital Wellbeing و تنظیمات گوشی شیائومی و سامسونگ
+ * متد پیش‌فرض استخراج برای ۲۴ ساعت روز قبل
+ */
+fun getAppUsageStats(context: Context): List<AppUsageInfo> {
+    return getAppUsageStatsForDate(context, null).apps
+}
+
+/**
+ * استخراج چندروزه بر مبنای روزهای کامل تقویمی گذشته (شروع از روز قبل)
+ * روز ۱ = روز قبل (از 00:00 دیروز تا 00:00 امروز)
+ * روز ۲ = دو روز قبل (از 00:00 دو روز قبل تا 00:00 دیروز)
  */
 fun getMultiDayAppUsageStats(context: Context, days: Int = 14): List<DayUsageReport> {
     val reports = mutableListOf<DayUsageReport>()
     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     val count = Math.max(1, Math.min(days, 14))
 
-    val now = System.currentTimeMillis()
-
-    for (i in 0 until count) {
+    for (i in 1..count) {
         val cal = Calendar.getInstance()
         cal.add(Calendar.DAY_OF_YEAR, -i)
 
-        // شروع روز: 00:00:00.000
+        // شروع: ساعت 00:00:00 آن روز
         cal.set(Calendar.HOUR_OF_DAY, 0)
         cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0)
         cal.set(Calendar.MILLISECOND, 0)
         val dayStart = cal.timeInMillis
-
-        // پایان روز: اگر روز جاری است تا لحظه فعلی، در غیر این صورت 23:59:59.999
-        val dayEnd = if (i == 0) {
-            now
-        } else {
-            cal.set(Calendar.HOUR_OF_DAY, 23)
-            cal.set(Calendar.MINUTE, 59)
-            cal.set(Calendar.SECOND, 59)
-            cal.set(Calendar.MILLISECOND, 999)
-            cal.timeInMillis
-        }
-
         val dateStr = sdf.format(Date(dayStart))
+
+        // پایان: ساعت 00:00:00 روز بعد (۲۴ ساعت کامل)
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        val dayEnd = cal.timeInMillis
+
         val dayApps = calculateAccurateUsageForWindow(context, dayStart, dayEnd)
         val totalMins = dayApps.sumOf { it.usageTimeMillis } / 60000L
         val nightMins = dayApps.sumOf { it.nightUsageMillis } / 60000L
